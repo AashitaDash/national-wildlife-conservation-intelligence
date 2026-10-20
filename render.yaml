@@ -6,7 +6,7 @@ services:
     name: nwcip-backend
     runtime: python
     region: oregon
-    plan: starter
+    plan: free
     buildCommand: "pip install -r backend/requirements.txt && python -m spacy download en_core_web_sm"
     startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
@@ -65,10 +65,11 @@ services:
 databases:
   # --------------------------------------------------------------------------
   # 3. Managed PostgreSQL Database (with PostGIS & pgvector)
+  # Note: Render Free PostgreSQL expires automatically after 30 days.
   # --------------------------------------------------------------------------
   - name: nwcip-postgres
     region: oregon
-    plan: starter
+    plan: free
     databaseName: wildlife_db
     user: wildlife_user
     postgresMajorVersion: "16"
