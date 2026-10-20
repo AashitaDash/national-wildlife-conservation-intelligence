@@ -63,16 +63,19 @@ def on_startup():
     """Initialize database tables and seed reference data on application launch."""
     init_db()
 
-    # Seed roles and badge catalog (idempotent)
+    # Seed roles, badges, demo accounts, and initial biodiversity telemetry (idempotent)
     from backend.app.database import SessionLocal
     from backend.app.services.gamification_service import seed_badges, seed_roles
-    from backend.app.seed_demo_dataset import seed_demo_users
+    from backend.app.seed_demo_dataset import seed_demo_users, seed_demo_submissions
+    from backend.app.services.seed_service import seed_biodiversity_dataset
     import os
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     with SessionLocal() as _db:
         seed_roles(_db)
         seed_badges(_db)
-        seed_demo_users(_db)
+        users = seed_demo_users(_db)
+        seed_biodiversity_dataset(_db)
+        seed_demo_submissions(_db, users)
 
 
 @app.get("/", tags=["System Information"])
