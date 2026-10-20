@@ -16,10 +16,16 @@ IS_POSTGRES = False
 
 try:
     # Test primary PostgreSQL connection
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+
     pg_engine = create_engine(
-        settings.DATABASE_URL,
+        db_url,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 3} if "psycopg" in settings.DATABASE_URL else {}
+        connect_args={"connect_timeout": 5} if "psycopg" in db_url else {}
     )
     with pg_engine.connect() as conn:
         conn.execute(text("SELECT 1"))
