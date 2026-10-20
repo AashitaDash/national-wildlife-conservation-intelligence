@@ -6,16 +6,15 @@ import logging
 import time
 from typing import List, Dict, Any, Optional
 
-try:
-    from sentence_transformers import SentenceTransformer
-    HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    HAS_SENTENCE_TRANSFORMERS = False
+HAS_SENTENCE_TRANSFORMERS = True
+
+import threading
 
 logger = logging.getLogger("wildlife_platform.nlp.embeddings")
 
 _MODEL_INSTANCE = None
 _MODEL_LOAD_FAILED = False
+_MODEL_LOCK = threading.Lock()
 
 
 class VectorEmbedder:
@@ -23,6 +22,9 @@ class VectorEmbedder:
     Dense semantic vector embedding engine for documents and queries.
     Utilizes Sentence-Transformers 'all-MiniLM-L6-v2' (384 dimensions)
     with unit-norm cosine projection.
+
+    Lazily loaded on first request with a thread lock to ensure minimal
+    resident memory footprint at application startup (preventing 512MB OOM kills).
     """
 
     DIMENSION = 384
@@ -30,38 +32,46 @@ class VectorEmbedder:
     @classmethod
     def preload_model(cls):
         """
-        Preload the model into memory during application startup to avoid blocking the first request.
+        Deprecated: Kept for backwards compatibility. Eager preloading at startup
+        is disabled on resource-constrained environments (512MB RAM).
+        Loading is deferred until the first vector embedding request.
         """
-        global _MODEL_INSTANCE, _MODEL_LOAD_FAILED
-        if _MODEL_INSTANCE is not None or _MODEL_LOAD_FAILED:
-            return
-
-        if not HAS_SENTENCE_TRANSFORMERS:
-            logger.warning("sentence_transformers not available. Utilizing deterministic hash vector projection.")
-            _MODEL_LOAD_FAILED = True
-            return
-
-        try:
-            logger.info("Pre-loading SentenceTransformer('all-MiniLM-L6-v2') at startup...")
-            t_load_start = time.time()
-            _MODEL_INSTANCE = SentenceTransformer("all-MiniLM-L6-v2")
-            t_load_end = time.time()
-            print(f"[NLP PERF] Startup model initialization = {(t_load_end - t_load_start) * 1000:.2f} ms")
-        except Exception as e:
-            logger.warning(f"Could not load SentenceTransformer ('{e}'). Utilizing deterministic hash vector projection.")
-            _MODEL_LOAD_FAILED = True
+        pass
 
     @classmethod
     def _get_model(cls):
+        """
+        Thread-safe on-demand lazy loader for SentenceTransformer.
+        Loads 'all-MiniLM-L6-v2' on CPU and caches the singleton instance.
+        """
         global _MODEL_INSTANCE, _MODEL_LOAD_FAILED
+
         if _MODEL_INSTANCE is not None:
             return _MODEL_INSTANCE
         if _MODEL_LOAD_FAILED:
             return None
 
-        # Fallback if preload was not called
-        cls.preload_model()
-        return _MODEL_INSTANCE
+        with _MODEL_LOCK:
+            # Double-checked locking
+            if _MODEL_INSTANCE is not None:
+                return _MODEL_INSTANCE
+            if _MODEL_LOAD_FAILED:
+                return None
+
+            try:
+                from sentence_transformers import SentenceTransformer
+                logger.info("Initializing SentenceTransformer('all-MiniLM-L6-v2') on-demand (CPU)...")
+                t0 = time.time()
+                _MODEL_INSTANCE = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+                logger.info(f"SentenceTransformer loaded successfully in {(time.time() - t0)*1000:.1f}ms.")
+                return _MODEL_INSTANCE
+            except Exception as e:
+                logger.warning(
+                    f"Could not load SentenceTransformer on demand ({e}). "
+                    "Falling back gracefully to deterministic FastText-style hash vector projection."
+                )
+                _MODEL_LOAD_FAILED = True
+                return None
 
     @classmethod
     def generate_hash_embedding(cls, text: str) -> List[float]:

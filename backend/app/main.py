@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
 from backend.app.database import init_db
-from nlp.embeddings import VectorEmbedder
 
 # Import Routers
 from backend.app.routers import (
@@ -72,9 +71,6 @@ def on_startup():
     with SessionLocal() as _db:
         seed_roles(_db)
         seed_badges(_db)
-
-    # Preload the ML embedding model at startup so the first request doesn't block
-    VectorEmbedder.preload_model()
 
 
 @app.get("/", tags=["System Information"])
