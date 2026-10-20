@@ -56,3 +56,19 @@ def system_health_status(db: Session = Depends(get_db)):
             "isolation_forest_anomaly_detector": if_model_exists
         }
     }
+
+
+@router.post("/trigger-seed")
+def trigger_database_seed(db: Session = Depends(get_db)):
+    """
+    On-demand administrative endpoint to seed baseline biodiversity data.
+    """
+    from backend.app.services.seed_service import seed_biodiversity_dataset
+    from backend.app.seed_demo_dataset import seed_demo_users, seed_demo_submissions
+    from backend.app.services.gamification_service import seed_badges, seed_roles
+    seed_roles(db)
+    seed_badges(db)
+    users = seed_demo_users(db)
+    seed_biodiversity_dataset(db)
+    seed_demo_submissions(db, users)
+    return {"status": "SUCCESS", "message": "Biodiversity dataset seeded successfully"}
