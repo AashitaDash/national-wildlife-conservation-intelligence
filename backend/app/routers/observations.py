@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -216,7 +216,7 @@ def create_observation(
 @router.put("/{obs_id}/verify", response_model=ObservationResponse)
 def verify_observation(
     obs_id: int,
-    status_action: str = Query("VERIFIED", enum=["VERIFIED", "REJECTED", "FLAGGED"]),
+    status_action: Literal["VERIFIED", "REJECTED", "FLAGGED"] = "VERIFIED",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("ADMIN", "ECOLOGIST", "RANGER", "FOREST_OFFICER"))
 ):
