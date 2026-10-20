@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #faf8f4;
+    color: #1f1e1a;
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  ::selection {
+    background: #1fa34a33;
+    color: #0c4320;
+  }
+}
+
+/* ─── Scrollbars ─────────────────────────────────── */
+::-webkit-scrollbar          { width: 5px; height: 5px; }
+::-webkit-scrollbar-track    { background: #1a1a17; }
+::-webkit-scrollbar-thumb    { background: #3a3a35; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4e4e48; }
+
+/* Content-area scrollbars stay light */
+main::-webkit-scrollbar-track { background: #f0ede6; }
+main::-webkit-scrollbar-thumb { background: #c5beaf; }
+
+/* ─── Leaflet ─────────────────────────────────────── */
+.custom-leaflet-marker { background: transparent; border: none; }
+
+/* ─── Animations ──────────────────────────────────── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-slide-in { animation: fadeSlideIn 0.28s ease-out both; }
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 0.7;  }
+}
+.animate-skeleton { animation: skeletonPulse 1.6s ease-in-out infinite; }
+
+/* ─── Institutional card ──────────────────────────── */
+.inst-card {
+  background: #ffffff;
+  border: 1px solid #e5e0d8;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* ─── Monospace label ─────────────────────────────── */
+.mono-label {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77746c;
+}

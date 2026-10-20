@@ -1,0 +1,86 @@
+[
+  {
+    "canonical_name": "Similipal Tiger Reserve",
+    "state": "Odisha",
+    "district": "Mayurbhanj",
+    "synonyms": ["similipal", "simlipal", "similipal tiger reserve", "similipal national park", "mayurbhanj", "baripada", "pithabata", "kuldiha", "hadgarh"]
+  },
+  {
+    "canonical_name": "Kaziranga National Park",
+    "state": "Assam",
+    "district": "Golaghat",
+    "synonyms": ["kaziranga", "kaziranga national park", "golaghat", "nagaon", "karbi anglong", "brahmaputra"]
+  },
+  {
+    "canonical_name": "Jim Corbett National Park",
+    "state": "Uttarakhand",
+    "district": "Nainital",
+    "synonyms": ["corbett", "jim corbett", "jim corbett national park", "dhikala", "ramnagar", "nainital"]
+  },
+  {
+    "canonical_name": "Sundarbans National Park",
+    "state": "West Bengal",
+    "district": "South 24 Parganas",
+    "synonyms": ["sundarbans", "sunderbans", "sundarban", "sundarbans national park", "sajnekhali", "delta"]
+  },
+  {
+    "canonical_name": "Bandipur National Park",
+    "state": "Karnataka",
+    "district": "Chamarajanagar",
+    "synonyms": ["bandipur", "bandipur national park", "mudumalai", "nagarhole", "chamarajanagar"]
+  },
+  {
+    "canonical_name": "Gir National Park",
+    "state": "Gujarat",
+    "district": "Junagadh",
+    "synonyms": ["gir", "gir national park", "sasan gir", "junagadh", "amreli"]
+  },
+  {
+    "canonical_name": "Desert National Park",
+    "state": "Rajasthan",
+    "district": "Jaisalmer",
+    "synonyms": ["desert national park", "thar", "thar desert", "jaisalmer", "pokhran", "barmer"]
+  },
+  {
+    "canonical_name": "Satkosia Gorge Sanctuary",
+    "state": "Odisha",
+    "district": "Angul",
+    "synonyms": ["satkosia", "satkosia gorge", "satkosia tiger reserve", "angul", "mahanadi", "tikarpada"]
+  },
+  {
+    "canonical_name": "Hemis National Park",
+    "state": "Ladakh",
+    "district": "Leh",
+    "synonyms": ["hemis", "hemis national park", "ladakh", "rumbak", "rumbak valley", "leh"]
+  },
+  {
+    "canonical_name": "Eravikulam National Park",
+    "state": "Kerala",
+    "district": "Idukki",
+    "synonyms": ["eravikulam", "eravikulam national park", "munnar", "idukki", "anamudi"]
+  },
+  {
+    "canonical_name": "Odisha",
+    "state": "Odisha",
+    "district": null,
+    "synonyms": ["odisha", "orissa"]
+  },
+  {
+    "canonical_name": "Assam",
+    "state": "Assam",
+    "district": null,
+    "synonyms": ["assam"]
+  },
+  {
+    "canonical_name": "Rajasthan",
+    "state": "Rajasthan",
+    "district": null,
+    "synonyms": ["rajasthan"]
+  },
+  {
+    "canonical_name": "Uttarakhand",
+    "state": "Uttarakhand",
+    "district": null,
+    "synonyms": ["uttarakhand"]
+  }
+]

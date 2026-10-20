@@ -1,0 +1,52 @@
+[
+  {
+    "canonical_name": "Asian Elephant",
+    "scientific_name": "Elephas maximus",
+    "synonyms": ["elephant", "elephants", "tusker", "tuskers", "asian elephant", "indian elephant", "elephas maximus"]
+  },
+  {
+    "canonical_name": "Bengal Tiger",
+    "scientific_name": "Panthera tigris",
+    "synonyms": ["tiger", "tigers", "tigress", "bengal tiger", "indian tiger", "panthera tigris", "pseudomelanistic tiger", "black tiger"]
+  },
+  {
+    "canonical_name": "Indian Leopard",
+    "scientific_name": "Panthera pardus",
+    "synonyms": ["leopard", "leopards", "panther", "panthers", "panthera pardus", "indian leopard"]
+  },
+  {
+    "canonical_name": "Greater One-horned Rhinoceros",
+    "scientific_name": "Rhinoceros unicornis",
+    "synonyms": ["rhino", "rhinos", "rhinoceros", "one-horned rhino", "indian rhinoceros", "rhinoceros unicornis"]
+  },
+  {
+    "canonical_name": "Snow Leopard",
+    "scientific_name": "Panthera uncia",
+    "synonyms": ["snow leopard", "snow leopards", "ounce", "panthera uncia"]
+  },
+  {
+    "canonical_name": "Great Indian Bustard",
+    "scientific_name": "Ardeotis nigriceps",
+    "synonyms": ["great indian bustard", "bustard", "bustards", "godawan", "ardeotis nigriceps"]
+  },
+  {
+    "canonical_name": "Gharial",
+    "scientific_name": "Gavialis gangeticus",
+    "synonyms": ["gharial", "gharials", "fish-eating crocodile", "gavialis gangeticus"]
+  },
+  {
+    "canonical_name": "Olive Ridley Sea Turtle",
+    "scientific_name": "Lepidochelys olivacea",
+    "synonyms": ["olive ridley", "sea turtle", "olive ridley turtle", "lepidochelys olivacea", "arribada"]
+  },
+  {
+    "canonical_name": "Nilgiri Tahr",
+    "scientific_name": "Nilgiritragus hylocrius",
+    "synonyms": ["nilgiri tahr", "tahr", "ibex", "nilgiritragus hylocrius"]
+  },
+  {
+    "canonical_name": "Indian Pangolin",
+    "scientific_name": "Manis crassicaudata",
+    "synonyms": ["pangolin", "pangolins", "scaly anteater", "manis crassicaudata", "indian pangolin"]
+  }
+]
