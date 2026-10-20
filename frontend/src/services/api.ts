@@ -91,13 +91,17 @@ export const authService = {
 
   getCurrentUser: async (): Promise<User> => {
     const response = await api.get<any>('/auth/me');
+    const r = response.data.role;
+    const roleObj = typeof r === 'object' && r !== null
+      ? r
+      : (typeof r === 'string' ? { id: response.data.role_id || 1, name: r } : null);
     return {
       id: response.data.id,
       username: response.data.email,
       email: response.data.email,
       full_name: response.data.full_name,
       is_active: response.data.is_active,
-      roles: response.data.role ? [response.data.role] : []
+      roles: roleObj ? [roleObj] : []
     };
   },
 };

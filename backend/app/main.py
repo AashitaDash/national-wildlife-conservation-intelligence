@@ -66,11 +66,13 @@ def on_startup():
     # Seed roles and badge catalog (idempotent)
     from backend.app.database import SessionLocal
     from backend.app.services.gamification_service import seed_badges, seed_roles
+    from backend.app.seed_demo_dataset import seed_demo_users
     import os
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     with SessionLocal() as _db:
         seed_roles(_db)
         seed_badges(_db)
+        seed_demo_users(_db)
 
 
 @app.get("/", tags=["System Information"])
