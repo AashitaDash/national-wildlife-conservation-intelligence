@@ -31,6 +31,7 @@ const API_BASE = (() => {
 
 export const api = axios.create({
   baseURL: API_BASE,
+  timeout: 45000, // 45 seconds timeout for cold starts and heavy analytical loads
   headers: {
     'Content-Type': 'application/json',
   },

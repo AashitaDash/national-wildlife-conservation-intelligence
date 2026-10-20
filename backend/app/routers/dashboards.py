@@ -122,34 +122,44 @@ def get_threats_summary(db: Session = Depends(get_db)):
 def get_species_risk_ranking(db: Session = Depends(get_db)):
     """
     Species catalog prioritized by recent ML composite risk scores and threat status.
+    Single-pass SQL aggregation for sub-second performance across large catalogs.
     """
-    species_all = db.query(Species).all()
-    rankings = []
-
-    for sp in species_all:
-        recent_risk = (
-            db.query(MLRiskScore)
-            .filter(MLRiskScore.species_id == sp.id)
-            .order_by(MLRiskScore.calculated_at.desc())
-            .first()
+    from sqlalchemy import text
+    sql = text("""
+        SELECT 
+            s.id AS species_id, 
+            s.common_name, 
+            s.scientific_name, 
+            s.iucn_category, 
+            COALESCE(rs.risk_level, 'MEDIUM') AS risk_level, 
+            COALESCE(rs.composite_score, 50.0) AS composite_score, 
+            COALESCE(o.cnt, 0) AS observation_count 
+        FROM species s 
+        LEFT JOIN (
+            SELECT DISTINCT ON (species_id) species_id, risk_level, composite_score 
+            FROM ml_risk_scores 
+            ORDER BY species_id, calculated_at DESC
+        ) rs ON s.id = rs.species_id 
+        LEFT JOIN (
+            SELECT species_id, COUNT(*) AS cnt 
+            FROM observations 
+            GROUP BY species_id
+        ) o ON s.id = o.species_id 
+        ORDER BY composite_score DESC;
+    """)
+    rows = db.execute(sql).fetchall()
+    return [
+        SpeciesRiskSummary(
+            species_id=r[0],
+            common_name=r[1],
+            scientific_name=r[2],
+            iucn_category=r[3],
+            risk_level=r[4],
+            composite_score=float(r[5]),
+            observation_count=int(r[6])
         )
-        obs_count = db.query(Observation).filter(Observation.species_id == sp.id).count()
-
-        rankings.append(
-            SpeciesRiskSummary(
-                species_id=sp.id,
-                common_name=sp.common_name,
-                scientific_name=sp.scientific_name,
-                iucn_category=sp.iucn_category,
-                risk_level=recent_risk.risk_level if recent_risk else "MEDIUM",
-                composite_score=recent_risk.composite_score if recent_risk else 50.0,
-                observation_count=obs_count
-            )
-        )
-
-    # Sort descending by composite score
-    rankings.sort(key=lambda x: x.composite_score, reverse=True)
-    return rankings
+        for r in rows
+    ]
 
 
 @router.get("/alerts", response_model=List[AlertResponse])
