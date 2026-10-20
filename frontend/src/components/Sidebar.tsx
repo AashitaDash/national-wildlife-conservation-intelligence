@@ -31,7 +31,12 @@ const BASE_NAV_ITEMS = [
   { to: '/reports',   label: 'REPORTS & EXPORTS',  icon: DownloadCloud   },
 ];
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { hasRole } = useAuth();
 
   // Role-tailored navigation items
@@ -63,14 +68,26 @@ export const Sidebar: React.FC = () => {
   }
 
   return (
-    <aside
-      className="w-56 shrink-0 flex flex-col border-r"
-      style={{
-        backgroundColor: '#1a1916',
-        borderRightColor: '#2a2924',
-        minHeight: 'calc(100vh - 3.5rem)',
-      }}
-    >
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden backdrop-blur-xs transition-opacity"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`fixed lg:static top-14 bottom-0 left-0 z-40 w-64 lg:w-56 shrink-0 flex flex-col border-r transition-transform duration-200 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+        style={{
+          backgroundColor: '#1a1916',
+          borderRightColor: '#2a2924',
+          minHeight: 'calc(100vh - 3.5rem)',
+        }}
+      >
       {/* Navigation */}
       <nav className="flex-1 px-2 pt-4 pb-2 space-y-0.5">
         {items.map(({ to, label, icon: Icon }) => (
@@ -78,6 +95,9 @@ export const Sidebar: React.FC = () => {
             key={to}
             to={to}
             end={to === '/'}
+            onClick={() => {
+              if (onClose) onClose();
+            }}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2.5 text-[10px] font-mono font-semibold tracking-widest uppercase transition-all rounded-sm ${
                 isActive
@@ -119,5 +139,6 @@ export const Sidebar: React.FC = () => {
         </p>
       </div>
     </aside>
+    </>
   );
 };

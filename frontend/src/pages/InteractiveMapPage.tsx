@@ -207,11 +207,11 @@ export const InteractiveMapPage: React.FC = () => {
           <p className="font-mono text-[10px] tracking-widest uppercase font-semibold mb-1" style={{ color: '#13843a' }}>
             SPATIAL INTELLIGENCE · POSTGIS JOIN ENGINE
           </p>
-          <h1 className="font-serif text-3xl font-bold leading-tight flex items-center gap-2" style={{ color: '#1a1916', fontFamily: "'Newsreader', Georgia, serif" }}>
-            <MapPin className="w-6 h-6" style={{ color: '#13843a' }} />
-            India Wildlife & Biodiversity Spatial Intelligence
+          <h1 className="font-serif text-2xl sm:text-3xl font-bold leading-tight flex items-center gap-2" style={{ color: '#1a1916', fontFamily: "'Newsreader', Georgia, serif" }}>
+            <MapPin className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" style={{ color: '#13843a' }} />
+            <span>India Wildlife & Biodiversity Spatial Intelligence</span>
           </h1>
-          <p className="text-sm mt-1" style={{ color: '#77746c' }}>
+          <p className="text-xs sm:text-sm mt-1" style={{ color: '#77746c' }}>
             State-wise biodiversity choropleth, conservation risk intelligence, and exact observation spatial distributions across 36 States & UTs.
           </p>
         </div>
@@ -438,23 +438,23 @@ export const InteractiveMapPage: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Map Container */}
-            <div className="lg:col-span-2">
-              <MapView
-                mapMode={mapMode}
-                choroplethShading={choroplethShading}
-                stateMetrics={stateMetricsMap}
-                stateMetricsVersion={stateMetricsVersion}
-                selectedStateName={selectedStateName}
-                onStateSelect={handleStateClick}
-                observations={filteredObservations}
-                height="640px"
-                selectedObservationId={selectedObs?.id ?? null}
-                onObservationClick={(obs) => { setSelectedObs(obs); setSelectedStateName(null); }}
-              />
-            </div>
+            <div className="lg:col-span-2 h-[420px] sm:h-[520px] lg:h-[640px] w-full">
+                <MapView
+                  mapMode={mapMode}
+                  choroplethShading={choroplethShading}
+                  stateMetrics={stateMetricsMap}
+                  stateMetricsVersion={stateMetricsVersion}
+                  selectedStateName={selectedStateName}
+                  onStateSelect={handleStateClick}
+                  observations={filteredObservations}
+                  height="100%"
+                  selectedObservationId={selectedObs?.id ?? null}
+                  onObservationClick={(obs) => { setSelectedObs(obs); setSelectedStateName(null); }}
+                />
+              </div>
 
             {/* Side Intelligence Panel */}
-            <div className="bg-[#fcfbf9] border border-[#e5e0d8] rounded-xl p-4 h-[640px] overflow-y-auto">
+            <div className="bg-[#fcfbf9] border border-[#e5e0d8] rounded-xl p-4 max-h-[500px] lg:h-[640px] overflow-y-auto">
               {/* Case 1: State Selected Drilldown */}
               {selectedStateName ? (
                 <div className="space-y-4 animate-fadeIn">

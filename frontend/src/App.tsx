@@ -32,6 +32,12 @@ const PUBLIC_PATHS = ['/login', '/register'];
 const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const isPublic = PUBLIC_PATHS.includes(location.pathname);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  // Close mobile drawer whenever route changes
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   if (isPublic) {
     // Public pages: full screen, no shell
@@ -41,16 +47,16 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#131210' }}>
       {/* Top Header */}
-      <Navbar />
-      <div className="flex flex-1 overflow-hidden">
+      <Navbar onMenuToggle={() => setMobileMenuOpen(prev => !prev)} />
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left Sidebar */}
-        <Sidebar />
+        <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
         {/* Cream Workspace */}
         <main
           className="flex-1 min-w-0 overflow-y-auto"
           style={{ backgroundColor: '#faf8f4' }}
         >
-          <div className="max-w-7xl mx-auto w-full p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
             {children}
           </div>
         </main>

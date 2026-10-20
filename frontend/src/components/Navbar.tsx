@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, Search, LogOut, Bell, User as UserIcon } from 'lucide-react';
+import { Shield, Search, LogOut, Bell, User as UserIcon, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -11,7 +11,11 @@ const ROLE_LABELS: Record<string, string> = {
   CITIZEN: 'CITIZEN',
 };
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onMenuToggle?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onMenuToggle }) => {
   const { user, logout, primaryRole } = useAuth();
   const navigate = useNavigate();
 
@@ -21,35 +25,46 @@ export const Navbar: React.FC = () => {
 
   return (
     <header
-      className="h-14 flex items-center justify-between px-5 shrink-0 border-b"
+      className="h-14 flex items-center justify-between px-3 sm:px-5 shrink-0 border-b relative z-30"
       style={{
         backgroundColor: '#131210',
         borderBottomColor: '#2a2924',
       }}
     >
-      {/* ── Brand ── */}
-      <Link to="/" className="flex items-center gap-3 group">
-        <div
-          className="w-8 h-8 flex items-center justify-center shrink-0"
-          style={{ backgroundColor: '#11682f', borderRadius: '3px' }}
+      {/* ── Left / Brand ── */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Mobile menu toggle */}
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden p-1.5 rounded text-[#a8a49c] hover:text-white hover:bg-[#23221d] transition-colors focus:outline-none focus:ring-1 focus:ring-[#1fa34a]"
+          aria-label="Toggle Navigation Menu"
         >
-          <Shield className="w-4 h-4 text-white" />
-        </div>
-        <div className="leading-none">
-          <span
-            className="block font-mono text-xs font-semibold tracking-widest uppercase"
-            style={{ color: '#f0ede6', letterSpacing: '0.16em' }}
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
+          <div
+            className="w-8 h-8 flex items-center justify-center shrink-0"
+            style={{ backgroundColor: '#11682f', borderRadius: '3px' }}
           >
-            WILDLIFE INTELLIGENCE
-          </span>
-          <span
-            className="block font-mono text-[9px] tracking-widest uppercase"
-            style={{ color: '#5e5b54', letterSpacing: '0.14em' }}
-          >
-            CONSERVATION DECISION SUPPORT
-          </span>
-        </div>
-      </Link>
+            <Shield className="w-4 h-4 text-white" />
+          </div>
+          <div className="leading-none">
+            <span
+              className="block font-mono text-[11px] sm:text-xs font-semibold tracking-wider sm:tracking-widest uppercase truncate max-w-[150px] sm:max-w-none"
+              style={{ color: '#f0ede6', letterSpacing: '0.14em' }}
+            >
+              WILDLIFE INTELLIGENCE
+            </span>
+            <span
+              className="hidden sm:block font-mono text-[9px] tracking-widest uppercase"
+              style={{ color: '#5e5b54', letterSpacing: '0.14em' }}
+            >
+              CONSERVATION DECISION SUPPORT
+            </span>
+          </div>
+        </Link>
+      </div>
 
       {/* ── Right controls ── */}
       <div className="flex items-center gap-3">
