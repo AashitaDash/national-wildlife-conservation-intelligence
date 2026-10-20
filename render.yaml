@@ -55,11 +55,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: nwcip-backend
-          property: host
-        # Render will populate this with https://nwcip-backend.onrender.com/api/v1 via frontend config or full URL
+        value: https://nwcip-backend.onrender.com
 
 databases:
   # --------------------------------------------------------------------------

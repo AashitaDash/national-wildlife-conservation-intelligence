@@ -14,11 +14,14 @@ import {
 
 const rawBase = (import.meta as any).env?.VITE_API_BASE_URL;
 const API_BASE = (() => {
-  if (!rawBase) return 'http://127.0.0.1:8000/api/v1';
+  if (!rawBase) return 'https://nwcip-backend.onrender.com/api/v1';
   let base = rawBase.trim();
-  if (!base.startsWith('http://') && !base.startsWith('https://')) {
-    base = `https://${base}`;
+  // If Render passed internal service name like "nwcip-backend" or "http://nwcip-backend"
+  base = base.replace(/^https?:\/\//, '');
+  if (!base.includes('.') && base.length > 0) {
+    base = `${base}.onrender.com`;
   }
+  base = `https://${base}`;
   base = base.replace(/\/+$/, '');
   if (!base.endsWith('/api/v1')) {
     base = `${base}/api/v1`;
