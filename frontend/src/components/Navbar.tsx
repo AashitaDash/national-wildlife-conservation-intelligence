@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Search, LogOut, Bell, User as UserIcon, Menu } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'ADMIN',

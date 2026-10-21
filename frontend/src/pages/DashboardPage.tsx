@@ -4,7 +4,7 @@ import {
   ShieldAlert, PawPrint, AlertTriangle, Activity,
   ArrowRight, TrendingUp, RefreshCw, Search,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { DemoBanner } from '../components/DemoBanner';
 import { RiskBadge, RiskIndicatorLabel } from '../components/RiskBadge';
 import { EmptyState } from '../components/EmptyState';
