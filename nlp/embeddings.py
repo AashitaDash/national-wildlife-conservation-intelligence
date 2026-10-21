@@ -82,7 +82,12 @@ class VectorEmbedder:
                 t0 = time.time()
                 # Force CPU; disable gradient tracking to halve memory overhead
                 with torch.no_grad():
-                    model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+                    try:
+                        # Try fast local/offline load first (sub-second if cached)
+                        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu", local_files_only=True)
+                    except Exception:
+                        # Fallback to standard online download if not cached yet
+                        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
                 _MODEL_INSTANCE = model
                 elapsed = (time.time() - t0) * 1000
                 logger.info(

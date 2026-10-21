@@ -337,15 +337,16 @@ CORE GROUNDING RULES:
         prompt = f"{cls.SYSTEM_PROMPT}\n\n{context}\n\nUser Question: {question}\n\nAnswer:"
         
         try:
+            # Short connect timeout (1.5s) to avoid delaying fallback if Ollama daemon is offline
             r = requests.post(
                 f"{base_url}/api/generate",
                 json={"model": model, "prompt": prompt, "stream": False},
-                timeout=settings.CHAT_LLM_TIMEOUT_SECONDS
+                timeout=(1.5, settings.CHAT_LLM_TIMEOUT_SECONDS)
             )
             if r.status_code == 200:
                 return r.json().get("response")
         except Exception as e:
-            logger.debug(f"Ollama call failed: {e}")
+            logger.debug(f"Ollama call failed or unavailable: {e}")
         return None
 
     @classmethod
