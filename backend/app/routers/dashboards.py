@@ -59,25 +59,30 @@ def get_observation_heatmap(
 ):
     """
     Observation spatial distribution coordinates for GIS/Leaflet density heatmaps.
+    Uses joinedload to avoid N+1 species name lookups.
     """
-    query = db.query(Observation).join(Species, Observation.species_id == Species.id)
+    from sqlalchemy.orm import joinedload
+    query = (
+        db.query(Observation)
+        .options(joinedload(Observation.species))
+        .join(Species, Observation.species_id == Species.id)
+    )
     if species_id:
         query = query.filter(Observation.species_id == species_id)
 
     records = query.order_by(Observation.observed_at.desc()).limit(limit).all()
-    points = []
-    for r in records:
-        points.append(
-            HeatmapPoint(
-                latitude=r.latitude,
-                longitude=r.longitude,
-                weight=1.0,
-                species_id=r.species_id,
-                species_common_name=r.species.common_name if r.species else "Unknown",
-                observed_at=r.observed_at.isoformat()
-            )
+    return [
+        HeatmapPoint(
+            latitude=r.latitude,
+            longitude=r.longitude,
+            weight=1.0,
+            species_id=r.species_id,
+            species_common_name=r.species.common_name if r.species else "Unknown",
+            observed_at=r.observed_at.isoformat()
         )
-    return points
+        for r in records
+    ]
+
 
 
 @router.get("/threats-summary", response_model=List[ThreatCategorySummary])

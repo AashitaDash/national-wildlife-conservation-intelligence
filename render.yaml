@@ -39,6 +39,10 @@ services:
         value: https://api.iucnredlist.org/api/v4
       - key: CHAT_LLM_PROVIDER
         value: extractive
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: LOG_LEVEL
+        value: info
 
   # --------------------------------------------------------------------------
   # 2. React Vite Frontend Static Site

@@ -1,20 +1,25 @@
 import re
 import math
 import hashlib
-import hashlib
 import logging
 import time
-from typing import List, Dict, Any, Optional
-
-HAS_SENTENCE_TRANSFORMERS = True
-
 import threading
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("wildlife_platform.nlp.embeddings")
 
 _MODEL_INSTANCE = None
 _MODEL_LOAD_FAILED = False
 _MODEL_LOCK = threading.Lock()
+
+# --- Memory budget guard -------------------------------------------------
+# SentenceTransformer all-MiniLM-L6-v2 requires ~85 MB resident.
+# On Render free tier (512 MB) loading it immediately at startup
+# causes OOM because PyTorch+transformers+spacy are already in memory.
+# We defer loading until the first embedding request AND add a 5-minute
+# cooldown so a failed load does not retry on every subsequent request.
+_LAST_LOAD_ATTEMPT: float = 0.0
+_LOAD_COOLDOWN_SECONDS: float = 300.0   # 5 minutes between retries
 
 
 class VectorEmbedder:
@@ -23,8 +28,10 @@ class VectorEmbedder:
     Utilizes Sentence-Transformers 'all-MiniLM-L6-v2' (384 dimensions)
     with unit-norm cosine projection.
 
-    Lazily loaded on first request with a thread lock to ensure minimal
-    resident memory footprint at application startup (preventing 512MB OOM kills).
+    Lazily loaded on first request with a thread lock to prevent
+    simultaneous model initialization under concurrent requests.
+    Falls back to deterministic FastText-style hash projection when
+    the model cannot be loaded (e.g. OOM on constrained environments).
     """
 
     DIMENSION = 384
@@ -32,9 +39,10 @@ class VectorEmbedder:
     @classmethod
     def preload_model(cls):
         """
-        Deprecated: Kept for backwards compatibility. Eager preloading at startup
-        is disabled on resource-constrained environments (512MB RAM).
-        Loading is deferred until the first vector embedding request.
+        Deprecated: Kept for backwards compatibility.
+        Eager preloading at startup is disabled on resource-constrained
+        environments (512 MB RAM). Loading is deferred to the first
+        vector embedding request.
         """
         pass
 
@@ -42,14 +50,20 @@ class VectorEmbedder:
     def _get_model(cls):
         """
         Thread-safe on-demand lazy loader for SentenceTransformer.
-        Loads 'all-MiniLM-L6-v2' on CPU and caches the singleton instance.
+        Loads 'all-MiniLM-L6-v2' on CPU and caches the singleton.
+        Includes a cooldown between failed attempts to prevent OOM loops.
         """
-        global _MODEL_INSTANCE, _MODEL_LOAD_FAILED
+        global _MODEL_INSTANCE, _MODEL_LOAD_FAILED, _LAST_LOAD_ATTEMPT
 
         if _MODEL_INSTANCE is not None:
             return _MODEL_INSTANCE
         if _MODEL_LOAD_FAILED:
-            return None
+            # Retry after cooldown so a transient OOM doesn't disable
+            # embeddings forever, but also doesn't spam retries.
+            if time.time() - _LAST_LOAD_ATTEMPT < _LOAD_COOLDOWN_SECONDS:
+                return None
+            # Reset so we try again
+            _MODEL_LOAD_FAILED = False
 
         with _MODEL_LOCK:
             # Double-checked locking
@@ -58,17 +72,28 @@ class VectorEmbedder:
             if _MODEL_LOAD_FAILED:
                 return None
 
+            _LAST_LOAD_ATTEMPT = time.time()
             try:
                 from sentence_transformers import SentenceTransformer
-                logger.info("Initializing SentenceTransformer('all-MiniLM-L6-v2') on-demand (CPU)...")
+                import torch
+                logger.info(
+                    "Initializing SentenceTransformer('all-MiniLM-L6-v2') on-demand (CPU)..."
+                )
                 t0 = time.time()
-                _MODEL_INSTANCE = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-                logger.info(f"SentenceTransformer loaded successfully in {(time.time() - t0)*1000:.1f}ms.")
+                # Force CPU; disable gradient tracking to halve memory overhead
+                with torch.no_grad():
+                    model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+                _MODEL_INSTANCE = model
+                elapsed = (time.time() - t0) * 1000
+                logger.info(
+                    f"SentenceTransformer loaded in {elapsed:.0f}ms. "
+                    f"Resident memory should increase ~85 MB."
+                )
                 return _MODEL_INSTANCE
             except Exception as e:
                 logger.warning(
-                    f"Could not load SentenceTransformer on demand ({e}). "
-                    "Falling back gracefully to deterministic FastText-style hash vector projection."
+                    f"Could not load SentenceTransformer ({type(e).__name__}: {e}). "
+                    "Falling back to deterministic FastText-style hash vector projection."
                 )
                 _MODEL_LOAD_FAILED = True
                 return None
@@ -77,8 +102,9 @@ class VectorEmbedder:
     def generate_hash_embedding(cls, text: str) -> List[float]:
         """
         Deterministic, unit-normalized 384-dimensional dense vector generator
-        using subword n-grams (FastText style) as an academic fallback.
-        Ensures morphological variations ('elephant' and 'elephants') share dense features.
+        using subword n-grams (FastText style) as a lightweight fallback.
+        Ensures morphological variations ('elephant' and 'elephants') share
+        dense features.
         """
         words = text.lower().split()
         vector = [0.0] * cls.DIMENSION
@@ -93,7 +119,7 @@ class VectorEmbedder:
             if len(w_clean) >= 3:
                 for n in (3, 4):
                     for i in range(len(w_clean) - n + 1):
-                        features.append(w_clean[i:i+n])
+                        features.append(w_clean[i:i + n])
 
         for feat in features:
             h = int(hashlib.md5(feat.encode("utf-8")).hexdigest(), 16)
@@ -113,31 +139,33 @@ class VectorEmbedder:
     def encode(cls, text: str) -> List[float]:
         """
         Encodes input string into a 384-dimensional unit vector.
+        Uses SentenceTransformer when available; falls back to hash projection.
         """
         if not text or not text.strip():
             return [0.0] * cls.DIMENSION
 
-        t_get_model_start = time.time()
         model = cls._get_model()
-        t_get_model_end = time.time()
-        print(f"[NLP PERF] cls._get_model call = {(t_get_model_end - t_get_model_start) * 1000:.2f} ms")
-        
+
         if model is not None:
             try:
-                t_emb_start = time.time()
-                emb = model.encode(text, normalize_embeddings=True)
-                t_emb_end = time.time()
-                print(f"[NLP PERF] SentenceTransformer embedding generation = {(t_emb_end - t_emb_start) * 1000:.2f} ms")
+                import torch
+                with torch.no_grad():
+                    emb = model.encode(
+                        text,
+                        normalize_embeddings=True,
+                        convert_to_numpy=True,
+                        show_progress_bar=False,
+                    )
                 return [round(float(x), 5) for x in emb.tolist()]
             except Exception as e:
-                logger.warning(f"Model encode failed ({e}), falling back to hash embedding.")
+                logger.warning(
+                    f"SentenceTransformer encode failed ({type(e).__name__}: {e}), "
+                    "falling back to hash embedding."
+                )
 
-        t_hash_start = time.time()
-        res = cls.generate_hash_embedding(text)
-        t_hash_end = time.time()
-        print(f"[NLP PERF] generate_hash_embedding = {(t_hash_end - t_hash_start) * 1000:.2f} ms")
-        return res
+        return cls.generate_hash_embedding(text)
 
+    # Alias so callers using either name work
     embed_text = encode
 
     @staticmethod
@@ -156,15 +184,14 @@ class VectorEmbedder:
         if norm_a == 0.0 or norm_b == 0.0:
             return 0.0
 
-        similarity = dot_product / (norm_a * norm_b)
-        return max(-1.0, min(1.0, float(similarity)))
+        return max(-1.0, min(1.0, dot_product / (norm_a * norm_b)))
 
     @classmethod
     def rank_documents(
         cls,
         query_embedding: List[float],
         documents: List[Dict[str, Any]],
-        top_k: int = 10
+        top_k: int = 10,
     ) -> List[Dict[str, Any]]:
         """
         Ranks document records by cosine similarity to query embedding.
@@ -173,14 +200,10 @@ class VectorEmbedder:
         for doc in documents:
             doc_emb = doc.get("embedding_json") or doc.get("embedding")
             if not doc_emb:
-                # Dynamically generate if missing
                 doc_emb = cls.encode(doc.get("cleaned_text") or doc.get("raw_text") or "")
 
             score = cls.cosine_similarity(query_embedding, doc_emb)
-            scored.append({
-                **doc,
-                "similarity_score": round(score, 4)
-            })
+            scored.append({**doc, "similarity_score": round(score, 4)})
 
         scored.sort(key=lambda x: x["similarity_score"], reverse=True)
         return scored[:top_k]

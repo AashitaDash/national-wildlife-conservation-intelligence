@@ -15,7 +15,6 @@ SessionLocal = None
 IS_POSTGRES = False
 
 try:
-    # Test primary PostgreSQL connection
     db_url = settings.DATABASE_URL
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
@@ -24,9 +23,18 @@ try:
 
     pg_engine = create_engine(
         db_url,
-        pool_pre_ping=True,
-        connect_args={"connect_timeout": 5} if "psycopg" in db_url else {}
+        # Keep pool small — Render free tier allows max 25 connections total
+        # across all services. With a single-worker uvicorn process, 3 is plenty.
+        pool_size=3,
+        max_overflow=2,        # Allow up to 5 total concurrent connections
+        pool_timeout=30,       # Wait up to 30s for an available connection
+        pool_recycle=1800,     # Recycle connections every 30 min (prevents stale TCP)
+        pool_pre_ping=True,    # Verify connection liveness before use
+        connect_args={
+            "connect_timeout": 10,
+        } if "psycopg" in db_url else {}
     )
+    # Validate connectivity at startup
     with pg_engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     engine = pg_engine
@@ -34,7 +42,7 @@ try:
     logger.info("Successfully connected to primary PostgreSQL database.")
 except Exception as e:
     logger.warning(
-        f"PostgreSQL connection to {settings.DATABASE_URL} failed ({e}). "
+        f"PostgreSQL connection failed ({type(e).__name__}: {e}). "
         f"Falling back to local SQLite database: {settings.FALLBACK_SQLITE_URL}."
     )
     engine = create_engine(

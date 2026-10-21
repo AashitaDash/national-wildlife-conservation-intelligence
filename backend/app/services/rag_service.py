@@ -155,16 +155,38 @@ class RAGRetrievalEngine:
         if not clean_q:
             return sources
 
-        # Dense query vector
+        # Dense query vector (lazy-loads SentenceTransformer on first call)
         query_vec = VectorEmbedder.encode(question)
-        documents = db.query(Document).all()
+        query_words = [
+            w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_q)
+            if w not in {"the", "and", "what", "which", "are", "have", "with", "for", "from"}
+        ]
+
+        # Load only the columns needed for scoring — avoids pulling full raw_text
+        # into memory for every document on every chat request.
+        # Cap at 200 most-recent documents; if the corpus grows beyond that, a
+        # proper pgvector ANN query should replace this linear scan.
+        from sqlalchemy import desc as sa_desc
+        docs = (
+            db.query(
+                Document.id,
+                Document.title,
+                Document.summary,
+                Document.source_type,
+                Document.author,
+                Document.topics,
+                Document.embedding_json,
+            )
+            .order_by(sa_desc(Document.id))
+            .limit(200)
+            .all()
+        )
 
         scored_docs = []
-        query_words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_q) if w not in {"the", "and", "what", "which", "are", "have", "with", "for", "from"}]
+        for row in docs:
+            doc_id, title, summary, source_type, author, topics, embedding_json = row
+            text_corpus = f"{title or ''} {summary or ''}".lower()
 
-        for doc in documents:
-            text_corpus = f"{doc.title} {doc.summary or ''} {doc.cleaned_text or doc.raw_text}".lower()
-            
             # 1. Lexical score
             lexical_score = 0.0
             if query_words:
@@ -175,37 +197,37 @@ class RAGRetrievalEngine:
 
             # 2. Vector score
             vector_score = 0.0
-            if doc.embedding_json and isinstance(doc.embedding_json, list) and len(doc.embedding_json) == 384:
-                vector_score = max(0.0, VectorEmbedder.cosine_similarity(query_vec, doc.embedding_json))
+            if embedding_json and isinstance(embedding_json, list) and len(embedding_json) == 384:
+                vector_score = max(0.0, VectorEmbedder.cosine_similarity(query_vec, embedding_json))
             else:
                 vector_score = lexical_score
 
             combined = (0.4 * lexical_score) + (0.6 * vector_score)
             if combined > 0.18 or lexical_score > 0.35:
-                scored_docs.append((doc, combined, lexical_score, vector_score))
+                scored_docs.append((doc_id, title, summary, source_type, author, topics, combined))
 
-        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        scored_docs.sort(key=lambda x: x[6], reverse=True)
 
-        for doc, score, lex, vec in scored_docs[:limit]:
-            content = doc.summary or doc.cleaned_text or doc.raw_text
+        for doc_id, title, summary, source_type, author, topics, score in scored_docs[:limit]:
+            content = summary or ""
             snippet_text = content[:400].strip().replace("\n", " ") + ("..." if len(content) > 400 else "")
-
             sources.append(ChatSourceItem(
                 id=f"S{len(sources)+1}",
                 source_type="DOCUMENT",
-                title=doc.title,
-                reference=f"/documents/{doc.id}",
+                title=title,
+                reference=f"/documents/{doc_id}",
                 snippet=snippet_text,
                 relevance_score=round(float(score), 4),
                 metadata={
-                    "document_id": doc.id,
-                    "source_type": doc.source_type,
-                    "author": doc.author,
-                    "topics": doc.topics or []
+                    "document_id": doc_id,
+                    "source_type": source_type,
+                    "author": author,
+                    "topics": topics or []
                 }
             ))
 
         return sources
+
 
     @classmethod
     def retrieve(cls, db: Session, question: str) -> Tuple[List[ChatSourceItem], ChatRetrievalMetadata]:

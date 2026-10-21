@@ -1,3 +1,5 @@
+import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
@@ -17,6 +19,8 @@ from backend.app.routers import (
 )
 from backend.app.routers import submissions, officer, admin_platform, gamification, spatial, reports
 
+logger = logging.getLogger("wildlife_platform.main")
+
 app = FastAPI(
     title="Wildlife Conservation Intelligence Platform",
     description=(
@@ -33,7 +37,7 @@ app = FastAPI(
 # CORS Middleware for React Vite / Web Frontends
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permits localhost:5173, localhost:3000 in dev
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +53,6 @@ app.include_router(ml.router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboards.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
-# New RBAC workflow routers
 app.include_router(submissions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(officer.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_platform.router, prefix=settings.API_V1_PREFIX)
@@ -60,15 +63,25 @@ app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
 
 @app.on_event("startup")
 def on_startup():
-    """Initialize database tables and seed reference data on application launch."""
+    """
+    Initialize database schema and seed reference data.
+
+    Memory discipline:
+    - Heavy ML models (SentenceTransformer, sklearn) are NOT loaded here.
+      They initialize lazily on first feature request.
+    - Seeding is idempotent and exits immediately when data already exists.
+    - No background warmup threads: on Render's 512 MB free tier, loading
+      SentenceTransformer immediately after PyTorch/spaCy/seed have been
+      imported pushes resident memory past the OOM threshold.
+    """
     init_db()
 
-    # Seed roles, badges, demo accounts, and initial biodiversity telemetry (idempotent)
+    # Idempotent data seeding — exits instantly when data already exists
     from backend.app.database import SessionLocal
     from backend.app.services.gamification_service import seed_badges, seed_roles
     from backend.app.seed_demo_dataset import seed_demo_users, seed_demo_submissions
     from backend.app.services.seed_service import seed_biodiversity_dataset
-    import os
+
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     with SessionLocal() as _db:
         seed_roles(_db)
@@ -77,21 +90,7 @@ def on_startup():
         seed_biodiversity_dataset(_db)
         seed_demo_submissions(_db, users)
 
-    # Warm up NLP/embedding pipeline in background so the first chat/NLP
-    # request does not stall for 15-30 seconds loading SentenceTransformer.
-    import threading
-    def _warmup_nlp():
-        try:
-            from nlp.embeddings import VectorEmbedder
-            _e = VectorEmbedder()
-            _e.embed_text("warmup")  # loads model weights into memory
-            import logging
-            logging.getLogger(__name__).info("NLP VectorEmbedder warmed up successfully.")
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(f"NLP warmup failed (non-fatal): {exc}")
-
-    threading.Thread(target=_warmup_nlp, daemon=True, name="nlp-warmup").start()
+    logger.info("NWCIP startup complete — ML models will load lazily on first use.")
 
 
 @app.get("/", tags=["System Information"])
@@ -106,9 +105,25 @@ def root():
 
 @app.get("/health", tags=["System Information"])
 def health_check():
+    """
+    Lightweight liveness probe used by Render health checks.
+    Does NOT load ML models or run database queries — returns instantly
+    so Render does not time out while models are being initialized.
+    """
+    from backend.app.database import engine
+    db_ok = False
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as exc:
+        logger.warning(f"Health check: database ping failed: {exc}")
+
     return {
-        "status": "HEALTHY",
-        "environment": settings.ENVIRONMENT
+        "status": "HEALTHY" if db_ok else "DEGRADED",
+        "database": "connected" if db_ok else "unavailable",
+        "environment": settings.ENVIRONMENT,
     }
 
 
