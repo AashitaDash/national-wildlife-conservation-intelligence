@@ -229,8 +229,12 @@ export const DashboardPage: React.FC = () => {
                       innerRadius={50}
                       outerRadius={85}
                       paddingAngle={2}
+                      stroke="none"
+                      style={{ outline: 'none' }}
                     >
-                      {riskPieData.map(d => <Cell key={d.name} fill={d.color} />)}
+                      {riskPieData.map(d => (
+                        <Cell key={d.name} fill={d.color} stroke="none" style={{ outline: 'none' }} />
+                      ))}
                     </Pie>
                     <Tooltip
                       contentStyle={{

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertOctagon, Bell, ShieldAlert, CheckCircle2, ChevronDown, Filter } from 'lucide-react';
+import { AlertOctagon, Bell, ShieldAlert, CheckCircle2, ChevronDown, Filter, Search, Check } from 'lucide-react';
 import { alertService } from '../services/api';
 import { Alert } from '../types';
 import { DemoBanner } from '../components/DemoBanner';
@@ -49,6 +49,7 @@ export const AlertsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('ALL');
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -77,7 +78,6 @@ export const AlertsPage: React.FC = () => {
     setExpandedId(nowExpanding ? alert.id : null);
 
     if (nowExpanding && !alert.is_read) {
-      // Optimistic update; reverted if the backend rejects it so the UI never claims a false state.
       setActionError(null);
       setAlerts((prev) => prev.map((a) => (a.id === alert.id ? { ...a, is_read: true } : a)));
       try {
@@ -87,6 +87,19 @@ export const AlertsPage: React.FC = () => {
         setAlerts((prev) => prev.map((a) => (a.id === alert.id ? { ...a, is_read: false } : a)));
         setActionError(errorMessage(err, 'Could not mark the alert as read'));
       }
+    }
+  };
+
+  const handleMarkSingleRead = async (e: React.MouseEvent, alertId: number) => {
+    e.stopPropagation();
+    setActionError(null);
+    setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, is_read: true } : a)));
+    try {
+      await alertService.markAsRead(alertId);
+    } catch (err) {
+      console.error('Mark-as-read failed:', err);
+      setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, is_read: false } : a)));
+      setActionError(errorMessage(err, 'Could not mark the alert as read'));
     }
   };
 
@@ -103,6 +116,13 @@ export const AlertsPage: React.FC = () => {
   const filteredAlerts = alerts.filter((a) => {
     if (severityFilter !== 'ALL' && a.severity !== severityFilter) return false;
     if (unreadOnly && a.is_read) return false;
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      const matchTitle = a.title?.toLowerCase().includes(q);
+      const matchMsg = a.message?.toLowerCase().includes(q);
+      const matchType = a.alert_type?.toLowerCase().includes(q);
+      if (!matchTitle && !matchMsg && !matchType) return false;
+    }
     return true;
   });
 
@@ -110,7 +130,7 @@ export const AlertsPage: React.FC = () => {
     <div className="space-y-6">
       <DemoBanner />
 
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4">
         <div>
           <p className="font-mono text-[10px] tracking-widest uppercase font-semibold mb-1" style={{ color: '#dc2626' }}>
             SYSTEM ALERTS
@@ -130,36 +150,54 @@ export const AlertsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono tracking-widest uppercase font-semibold">
-        <Filter className="w-3.5 h-3.5" style={{ color: '#94918a' }} />
-        {severityOptions.map((sev) => (
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 bg-white border border-[#e5e0d8] rounded-sm">
+        {/* Severity & Unread Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono tracking-widest uppercase font-semibold">
+          <Filter className="w-3.5 h-3.5" style={{ color: '#94918a' }} />
+          {severityOptions.map((sev) => {
+            const count = sev === 'ALL' ? alerts.length : alerts.filter(a => a.severity === sev).length;
+            return (
+              <button
+                key={sev}
+                onClick={() => setSeverityFilter(sev)}
+                className={`px-3 py-1.5 transition-all border ${
+                  severityFilter === sev
+                    ? 'bg-[#1a1916] text-white border-[#1a1916]'
+                    : 'bg-white text-[#94918a] border-[#e5e0d8] hover:border-[#1a1916]'
+                }`}
+                style={{ borderRadius: '3px' }}
+              >
+                {sev} ({count})
+              </button>
+            );
+          })}
+          <span className="w-px h-4 mx-1" style={{ backgroundColor: '#e5e0d8' }} />
           <button
-            key={sev}
-            onClick={() => setSeverityFilter(sev)}
-            className={`px-3 py-1.5 transition-all border ${
-              severityFilter === sev
-                ? 'bg-[#1a1916] text-white border-[#1a1916]'
-                : 'bg-white text-[#94918a] border-[#e5e0d8] hover:border-[#1a1916]'
+            onClick={() => setUnreadOnly((v) => !v)}
+            className={`px-3 py-1.5 transition-all border flex items-center gap-1.5 ${
+              unreadOnly
+                ? 'bg-[#dc2626] text-white border-[#dc2626]'
+                : 'bg-white text-[#94918a] border-[#e5e0d8] hover:border-[#dc2626]'
             }`}
             style={{ borderRadius: '3px' }}
           >
-            {sev}
+            <Bell className="w-3 h-3" />
+            UNREAD ({unreadCount})
           </button>
-        ))}
-        <span className="w-px h-4 mx-1" style={{ backgroundColor: '#e5e0d8' }} />
-        <button
-          onClick={() => setUnreadOnly((v) => !v)}
-          className={`px-3 py-1.5 transition-all border flex items-center gap-1.5 ${
-            unreadOnly
-              ? 'bg-[#dc2626] text-white border-[#dc2626]'
-              : 'bg-white text-[#94918a] border-[#e5e0d8] hover:border-[#dc2626]'
-          }`}
-          style={{ borderRadius: '3px' }}
-        >
-          <Bell className="w-3 h-3" />
-          UNREAD ONLY
-        </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative min-w-[220px]">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94918a]" />
+          <input
+            type="text"
+            placeholder="Search alerts or species..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-3 py-1 text-xs border border-[#e5e0d8] rounded focus:outline-none focus:border-[#13843a] bg-[#fdfaf5]"
+          />
+        </div>
       </div>
 
       {actionError && (
@@ -228,9 +266,21 @@ export const AlertsPage: React.FC = () => {
                     <p className="text-xs text-[#77746c] leading-relaxed bg-[#fdfaf5] p-3 rounded-sm border border-[#e5e0d8] mb-2">
                       {al.message}
                     </p>
-                    <div className="flex items-center justify-between text-[10px] font-mono text-[#94918a]">
-                      <span>Type: {al.alert_type}</span>
-                      <span>Logged at: {new Date(al.created_at).toLocaleString()}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-[#94918a]">
+                      <span>Type: {al.alert_type} &middot; Logged: {new Date(al.created_at).toLocaleString()}</span>
+                      {!al.is_read ? (
+                        <button
+                          type="button"
+                          onClick={(e) => handleMarkSingleRead(e, al.id)}
+                          className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <Check className="w-3 h-3" /> Mark as Read
+                        </button>
+                      ) : (
+                        <span className="text-emerald-700 flex items-center gap-1 font-semibold">
+                          <CheckCircle2 className="w-3 h-3" /> Resolved
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}

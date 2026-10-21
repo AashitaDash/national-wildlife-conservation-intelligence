@@ -234,8 +234,18 @@ class RAGRetrievalEngine:
         start_t = time.time()
         intent = cls.detect_intent(question)
         
-        db_sources = cls.retrieve_database_evidence(db, question, limit=4)
-        doc_sources = cls.retrieve_document_evidence(db, question, limit=4)
+        # 1. Fetch database evidence
+        db_sources = cls.retrieve_database_evidence(db, question, limit=5)
+        
+        # 2. For purely structured queries (e.g. fewest observation counts, species risk ranks),
+        # skip expensive vector document search if sufficient direct database facts were retrieved.
+        q_lower = question.lower()
+        is_structured_count_query = any(w in q_lower for w in ["fewest", "least", "most", "sparse", "rare", "how many observations", "observation records", "observation count"])
+        
+        if is_structured_count_query and len(db_sources) > 0:
+            doc_sources = []
+        else:
+            doc_sources = cls.retrieve_document_evidence(db, question, limit=4)
 
         # Merge and re-index S1, S2...
         all_sources: List[ChatSourceItem] = []

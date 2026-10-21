@@ -8,8 +8,10 @@ export const AIAssistantPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
+  const activeRequestIdRef = React.useRef(0);
 
   const handleSendMessage = async (query: string) => {
+    const currentRequestId = ++activeRequestIdRef.current;
     const userMsg: ChatMessage = {
       role: 'user',
       content: query,
@@ -24,9 +26,11 @@ export const AIAssistantPage: React.FC = () => {
         conversation_history: messages.slice(-6), // Send bounded recent conversation
       });
 
+      if (activeRequestIdRef.current !== currentRequestId) return;
+
       const assistantMsg: ChatMessage = {
         role: 'assistant',
-        content: res.answer,
+        content: res.answer || "No verified platform records were found matching this inquiry.",
         sources: res.sources,
         retrieval_metadata: res.retrieval_metadata,
         created_at: new Date().toISOString(),
@@ -35,15 +39,20 @@ export const AIAssistantPage: React.FC = () => {
       setMessages((prev) => [...prev, assistantMsg]);
       setLastResponse(res);
     } catch (err: any) {
+      if (activeRequestIdRef.current !== currentRequestId) return;
+      const detail = err?.response?.data?.detail;
       const errorMsg: ChatMessage = {
         role: 'assistant',
-        content:
-          "Unable to reach the conservation assistant service or backend platform. Please verify your connection or check that the backend service is operational.",
+        content: detail
+          ? `Conservation Assistant: ${detail}`
+          : "Unable to reach the conservation assistant service or backend platform. Please verify your connection or check that the backend service is operational.",
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
-      setLoading(false);
+      if (activeRequestIdRef.current === currentRequestId) {
+        setLoading(false);
+      }
     }
   };
 

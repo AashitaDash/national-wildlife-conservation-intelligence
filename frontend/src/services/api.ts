@@ -364,10 +364,12 @@ export const observationService = {
     return { items };
   },
 
-  getMapObservations: async (params?: { species_id?: number, taxonomic_group?: string, state_name?: string, min_lat?: number, max_lat?: number, min_lon?: number, max_lon?: number }): Promise<{ items: Observation[], total_loaded: number }> => {
+  getMapObservations: async (params?: { species_id?: number, taxonomic_group?: string, state_name?: string, min_lat?: number, max_lat?: number, min_lon?: number, max_lon?: number }): Promise<{ items: Observation[], total_loaded: number, total_matching: number }> => {
     const response = await api.get('/observations/map', { params });
     const items = Array.isArray(response.data) ? response.data : response.data.data || [];
-    return { items, total_loaded: items.length };
+    const headerTotal = response.headers?.['x-total-count'];
+    const totalMatching = headerTotal ? parseInt(headerTotal, 10) : items.length;
+    return { items, total_loaded: items.length, total_matching: isNaN(totalMatching) ? items.length : totalMatching };
   },
 
   createObservation: async (obsData: Partial<Observation>): Promise<Observation> => {
@@ -380,26 +382,37 @@ export const observationService = {
 export const alertService = {
   getAlerts: async (): Promise<{ items: Alert[] }> => {
     const response = await api.get('/dashboards/alerts');
+    const readAlertIds = (() => {
+      try {
+        return new Set(JSON.parse(localStorage.getItem('nwcip_read_alert_ids') || '[]'));
+      } catch {
+        return new Set<number>();
+      }
+    })();
     const items = (Array.isArray(response.data) ? response.data : []).map((a: any) => ({
-      ...a,
-      alert_type: a.severity, // Backend returns severity instead of specific alert_type
-      is_read: false
+      id: a.id,
+      title: a.title,
+      alert_type: a.alert_type || a.severity || 'ECOLOGICAL_ANOMALY',
+      severity: a.severity,
+      message: a.description || a.message || '',
+      is_read: a.is_resolved || readAlertIds.has(a.id),
+      created_at: a.created_at
     }));
     return { items };
   },
 
   markAsRead: async (alertId: number): Promise<Alert> => {
-    // The backend doesn't have an endpoint to mark alerts as read.
-    // Return a mock success response to satisfy the frontend gracefully.
-    return {
-      id: alertId,
-      title: 'Alert',
-      alert_type: 'INFO',
-      severity: 'INFO',
-      message: 'Mock read state',
-      is_read: true,
-      created_at: new Date().toISOString()
-    };
+    try {
+      const readAlertIds: number[] = JSON.parse(localStorage.getItem('nwcip_read_alert_ids') || '[]');
+      if (!readAlertIds.includes(alertId)) {
+        readAlertIds.push(alertId);
+        localStorage.setItem('nwcip_read_alert_ids', JSON.stringify(readAlertIds));
+      }
+    } catch {
+      // ignore localstorage errors
+    }
+    const response = await api.post(`/dashboards/alerts/${alertId}/read`);
+    return response.data;
   },
 };
 

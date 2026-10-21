@@ -72,3 +72,23 @@ main::-webkit-scrollbar-thumb { background: #c5beaf; }
   text-transform: uppercase;
   color: #77746c;
 }
+
+/* ─── Recharts SVG Focus Outline Reset ──────────────── */
+/* Fix unwanted black rectangular focus border on Recharts Pie/Donut sectors while preserving user accessibility on interactive inputs */
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-surface:active,
+.recharts-pie,
+.recharts-pie-sector,
+.recharts-pie-sector:focus,
+.recharts-pie-sector:active,
+.recharts-sector,
+.recharts-sector:focus,
+.recharts-sector:active,
+.recharts-wrapper,
+.recharts-wrapper:focus,
+.recharts-wrapper:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+

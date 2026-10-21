@@ -42,6 +42,8 @@ class AlertResponse(BaseModel):
     title: str
     description: str
     severity: str
+    alert_type: Optional[str] = "ECOLOGICAL_ANOMALY"
     species_id: Optional[int] = None
     species_name: Optional[str] = None
+    is_resolved: Optional[bool] = False
     created_at: str

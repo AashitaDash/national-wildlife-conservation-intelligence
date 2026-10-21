@@ -1,6 +1,6 @@
 from typing import List, Optional, Literal
 import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from backend.app.dependencies import get_db, get_current_user, require_roles
@@ -82,6 +82,7 @@ def list_observations(
 
 @router.get("/map", response_model=List[ObservationResponse])
 def get_map_observations(
+    response: Response,
     species_id: Optional[int] = Query(None, description="Filter by species ID"),
     taxonomic_group: Optional[str] = Query(None, description="Filter by class (e.g. Mammalia, Aves, Reptilia, Amphibia)"),
     state_name: Optional[str] = Query(None, description="Filter by state using PostGIS spatial containment"),
@@ -99,6 +100,7 @@ def get_map_observations(
     When taxonomic_group is provided, filters observations by the species class_name.
     Returns a diverse species-distributed sample when no species_id is provided,
     avoiding slow ORDER BY random() full-table scans.
+    Attaches X-Total-Count and X-Display-Count headers to reflect exact DB matches.
     """
     from sqlalchemy import text as sa_text
 
@@ -114,6 +116,19 @@ def get_map_observations(
             params["tax_group"] = taxonomic_group
 
         extra_sql = ("AND " + " AND ".join(where_extra)) if where_extra else ""
+
+        # Compute exact total count for the state filter
+        count_sql = sa_text(f"""
+            SELECT COUNT(*)
+            FROM observations o
+            JOIN state_boundaries sb
+                ON ST_Contains(sb.geom, ST_SetSRID(ST_Point(o.longitude, o.latitude), 4326))
+            JOIN species sp ON o.species_id = sp.id
+            WHERE LOWER(sb.state_name) = LOWER(:state_name)
+            {extra_sql}
+        """)
+        total_count = db.execute(count_sql, params).scalar() or 0
+
         sql = sa_text(f"""
             SELECT
                 o.id, o.species_id, o.location_id, o.source_id, o.submitted_by_user_id,
@@ -135,6 +150,8 @@ def get_map_observations(
             LIMIT :lim
         """)
         rows = db.execute(sql, params).fetchall()
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["X-Display-Count"] = str(len(rows))
         return [_row_to_response(r) for r in rows]
 
     # --- Build WHERE clauses for non-spatial path ---
@@ -162,6 +179,15 @@ def get_map_observations(
 
     where_sql = " AND ".join(where_parts)
     join_species = "JOIN species sp ON o.species_id = sp.id" if taxonomic_group else "LEFT JOIN species sp ON o.species_id = sp.id"
+
+    # Compute exact total matching count
+    count_sql = sa_text(f"""
+        SELECT COUNT(*)
+        FROM observations o
+        {join_species}
+        WHERE {where_sql}
+    """)
+    total_count = db.execute(count_sql, params2).scalar() or 0
 
     if species_id or taxonomic_group:
         # Targeted query: most-recent observations first, no sampling needed
@@ -204,6 +230,8 @@ def get_map_observations(
             LIMIT :lim
         """)
         rows = db.execute(cte_sql, params2).fetchall()
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["X-Display-Count"] = str(len(rows))
         return [_row_to_response(r) for r in rows]
 
     # Standard path (species_id or taxonomic_group provided)
@@ -225,6 +253,8 @@ def get_map_observations(
         LIMIT :lim
     """)
     rows = db.execute(flat_sql, params2).fetchall()
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Display-Count"] = str(len(rows))
     return [_row_to_response(r) for r in rows]
 
 

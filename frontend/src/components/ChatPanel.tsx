@@ -37,6 +37,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [expandedSourceMsgIndex, setExpandedSourceMsgIndex] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  React.useEffect(() => {
+    let timer: any = null;
+    if (loading) {
+      setElapsedSeconds(0);
+      timer = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [loading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,9 +206,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {/* Loading Spinner */}
         {loading && (
-          <div className="flex items-center gap-2 text-stone-400 p-3 bg-[#1e1c18] border border-stone-800 rounded-lg max-w-xs text-xs font-mono">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Retrieving platform evidence & synthesizing...</span>
+          <div className="flex items-center gap-2.5 text-stone-300 p-3 bg-[#1e1c18] border border-stone-800 rounded-lg max-w-sm text-xs font-mono shadow-md">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-emerald-400 font-semibold">Retrieving platform evidence...</span>
+              <span className="text-[10px] text-stone-400">
+                {elapsedSeconds > 0 ? `Elapsed: ${elapsedSeconds}s · Searching PostgreSQL facts` : 'Querying database telemetry'}
+              </span>
+            </div>
           </div>
         )}
       </div>

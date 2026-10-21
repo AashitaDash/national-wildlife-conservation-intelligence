@@ -170,26 +170,70 @@ def get_species_risk_ranking(db: Session = Depends(get_db)):
 @router.get("/alerts", response_model=List[AlertResponse])
 def get_conservation_alerts(
     unresolved_only: bool = True,
+    deduplicate: bool = True,
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
     """
     Real-time conservation intelligence alerts dispatched by the anomaly engine.
+    Deduplicates recurring alerts for the same species and alert title to prevent spam.
     """
     query = db.query(ConservationAlert)
     if unresolved_only:
         query = query.filter(ConservationAlert.is_resolved == False)
 
-    alerts = query.order_by(ConservationAlert.created_at.desc()).limit(limit).all()
+    # Fetch recent candidate alerts
+    raw_alerts = query.order_by(ConservationAlert.created_at.desc()).limit(limit * 3 if deduplicate else limit).all()
+
+    if deduplicate:
+        seen = set()
+        deduped = []
+        for a in raw_alerts:
+            # Deduplicate by species_id and normalized title prefix
+            title_core = a.title.split(":")[0].strip().lower() if ":" in a.title else a.title.strip().lower()
+            key = (a.species_id, a.alert_type, title_core)
+            if key not in seen:
+                seen.add(key)
+                deduped.append(a)
+                if len(deduped) >= limit:
+                    break
+        alerts = deduped
+    else:
+        alerts = raw_alerts[:limit]
+
     return [
         AlertResponse(
             id=a.id,
             title=a.title,
             description=a.message,
             severity=a.severity,
+            alert_type=a.alert_type or "ECOLOGICAL_ANOMALY",
             species_id=a.species_id,
             species_name=a.species.common_name if a.species else None,
+            is_resolved=a.is_resolved,
             created_at=a.created_at.isoformat() if a.created_at else ""
         )
         for a in alerts
     ]
+
+
+@router.post("/alerts/{alert_id}/read")
+def mark_alert_as_read(
+    alert_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Mark a conservation alert as resolved / read.
+    """
+    alert = db.query(ConservationAlert).filter(ConservationAlert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    alert.is_resolved = True
+    db.commit()
+    db.refresh(alert)
+    return {
+        "status": "success",
+        "id": alert.id,
+        "is_resolved": alert.is_resolved,
+        "message": "Alert marked as read"
+    }

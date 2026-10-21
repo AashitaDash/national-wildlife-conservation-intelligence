@@ -34,6 +34,7 @@ export const InteractiveMapPage: React.FC = () => {
   const [selectedObs, setSelectedObs] = useState<Observation | null>(null);
   const [speciesCatalog, setSpeciesCatalog] = useState<any[]>([]);
   const [totalLoaded, setTotalLoaded] = useState(0);
+  const [totalMatching, setTotalMatching] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [activeStateFilter, setActiveStateFilter] = useState<string | null>(null);
 
@@ -130,6 +131,7 @@ export const InteractiveMapPage: React.FC = () => {
 
         const res = await observationService.getMapObservations(params);
         setTotalLoaded(res.total_loaded);
+        setTotalMatching(res.total_matching);
         
         const names = Object.fromEntries(speciesCatalog.map(sp => [sp.id, sp.common_name]));
         
@@ -249,7 +251,7 @@ export const InteractiveMapPage: React.FC = () => {
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Observation Points ({totalLoaded})
+            Observation Points ({totalMatching.toLocaleString()})
           </button>
         </div>
       </div>
@@ -327,7 +329,7 @@ export const InteractiveMapPage: React.FC = () => {
                     selectedStatus === 'ALL' ? 'bg-[#13843a] text-white' : 'bg-[#f5f3ee] text-[#5e5b54]'
                   }`}
                 >
-                  ALL ({totalLoaded})
+                  ALL ({totalLoaded === totalMatching ? totalLoaded.toLocaleString() : `${totalLoaded.toLocaleString()} of ${totalMatching.toLocaleString()}`})
                 </button>
                 <button
                   onClick={() => setSelectedStatus('VERIFIED')}
@@ -335,7 +337,7 @@ export const InteractiveMapPage: React.FC = () => {
                     selectedStatus === 'VERIFIED' ? 'bg-[#13843a] text-white' : 'bg-[#f5f3ee] text-[#5e5b54]'
                   }`}
                 >
-                  VERIFIED
+                  VERIFIED ({observations.filter(o => o.verification_status === 'VERIFIED').length.toLocaleString()})
                 </button>
               </div>
 
@@ -432,7 +434,11 @@ export const InteractiveMapPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <MapLegend mapMode={mapMode} choroplethShading={choroplethShading} />
             <div className="text-[11px] font-mono text-[#94918a] hidden sm:block">
-              {mapMode !== 'OBSERVATIONS' ? 'Click any state for full biodiversity drilldown' : 'Click observation markers to view record details'}
+              {mapMode !== 'OBSERVATIONS'
+                ? 'Click any state for full biodiversity drilldown'
+                : totalMatching > totalLoaded
+                  ? `Displaying ${totalLoaded.toLocaleString()} representative markers of ${totalMatching.toLocaleString()} total verified & field records in DB`
+                  : `Displaying all ${totalLoaded.toLocaleString()} matching observation records in DB`}
             </div>
           </div>
 
