@@ -47,9 +47,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const register = async (userData: { username: string; email: string; password: string; full_name?: string }) => {
     const res = await authService.register(userData);
-    localStorage.setItem('token', res.access_token);
-    setToken(res.access_token);
-    setUser(res.user);
+    // Backend returns an empty access_token on register (user must login separately).
+    // Do NOT store an empty token — that would trigger a getCurrentUser() call with
+    // an empty Bearer header and immediately kick off a logout() loop.
+    if (res.access_token) {
+      localStorage.setItem('token', res.access_token);
+      setToken(res.access_token);
+      setUser(res.user);
+    }
+    // If no token returned, just let the caller redirect to /login
   };
 
   const logout = () => {

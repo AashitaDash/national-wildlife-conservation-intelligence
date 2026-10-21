@@ -77,6 +77,22 @@ def on_startup():
         seed_biodiversity_dataset(_db)
         seed_demo_submissions(_db, users)
 
+    # Warm up NLP/embedding pipeline in background so the first chat/NLP
+    # request does not stall for 15-30 seconds loading SentenceTransformer.
+    import threading
+    def _warmup_nlp():
+        try:
+            from nlp.embeddings import VectorEmbedder
+            _e = VectorEmbedder()
+            _e.embed_text("warmup")  # loads model weights into memory
+            import logging
+            logging.getLogger(__name__).info("NLP VectorEmbedder warmed up successfully.")
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(f"NLP warmup failed (non-fatal): {exc}")
+
+    threading.Thread(target=_warmup_nlp, daemon=True, name="nlp-warmup").start()
+
 
 @app.get("/", tags=["System Information"])
 def root():
