@@ -48,3 +48,4 @@ __all__ = [
 ]
 
 from backend.app.models.global_intelligence import GlobalSourceRegistry, GlobalIntelligenceRecord
+

@@ -53,3 +53,4 @@ All file names and paths referenced above exist under `backend/app/`.
 
 ---
 *Information is drawn directly from source files (`main.py`, `dependencies.py`, router modules, and service implementations). No code was altered.*
+

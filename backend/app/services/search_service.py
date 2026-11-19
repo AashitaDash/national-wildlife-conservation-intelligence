@@ -201,3 +201,4 @@ class SearchService:
         combined = doc_results + species_results
         combined.sort(key=lambda r: r.relevance_score, reverse=True)
         return combined[:limit]
+

@@ -256,3 +256,4 @@ erd_path = project_root / "docs" / "erd.jpg"
 image.save(str(erd_path), "JPEG", quality=95)
 print(f"ER diagram saved to {erd_path}")
 
+

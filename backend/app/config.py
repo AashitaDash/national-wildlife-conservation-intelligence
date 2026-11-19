@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     FALLBACK_SQLITE_URL: str = "sqlite:///./wildlife_dev.db"
 
     # Authentication & Security
-    JWT_SECRET: str = "super_secret_conservation_intelligence_jwt_key_2026_change_in_prod"
+    JWT_SECRET: str = "dev-only-insecure-secret-change-before-deployment"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440  # 24 hours
 
@@ -81,3 +81,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

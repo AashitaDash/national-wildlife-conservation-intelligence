@@ -63,3 +63,4 @@ class MLAnomaly(Base):
 
     def __repr__(self):
         return f"<MLAnomaly(id={self.id}, species_id={self.species_id}, type='{self.anomaly_type}', score={self.anomaly_score:.3f}, status='{self.status}')>"
+

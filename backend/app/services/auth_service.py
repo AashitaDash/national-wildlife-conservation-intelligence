@@ -629,3 +629,4 @@ class AuthService:
         )
 
         return new_user, token
+

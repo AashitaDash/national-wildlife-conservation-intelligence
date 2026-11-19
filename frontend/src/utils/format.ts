@@ -28,3 +28,4 @@ export const errorMessage = (err: any, fallback: string): string => {
   if (status) return `${fallback} (server responded ${status}${typeof detail === 'string' ? `: ${detail}` : ''}).`;
   return `${fallback} (no response from server — is the backend running?).`;
 };
+

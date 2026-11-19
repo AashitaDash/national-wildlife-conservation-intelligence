@@ -86,3 +86,4 @@ def generate_report(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Report generation error: {str(e)}",
         )
+

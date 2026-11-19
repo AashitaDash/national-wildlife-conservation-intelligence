@@ -40,3 +40,4 @@ class EmailService:
                 server.send_message(msg)
 
         await asyncio.to_thread(_send)
+

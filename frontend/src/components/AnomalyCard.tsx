@@ -290,3 +290,4 @@ export const AnomalyCard: React.FC<AnomalyCardProps> = ({ anomaly, onStatusChang
     </div>
   );
 };
+

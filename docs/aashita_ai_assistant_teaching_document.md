@@ -620,3 +620,4 @@ A **hallucination** is an LLM‑generated statement that is **not supported by a
 **End of Document**
 
 *(All sections are deliberately verbose to serve a beginner‑friendly teaching purpose. The markdown file can be opened in any editor; for PDF export you may use any Markdown‑to‑PDF tool such as Pandoc, typora, or an online converter.)*
+

@@ -21,3 +21,4 @@
 ---
 
 *All information above is directly extracted from the repository files (`README.md`, source code in `backend/app/routers`, `backend/app/models`, `frontend/src/App.tsx`).*
+

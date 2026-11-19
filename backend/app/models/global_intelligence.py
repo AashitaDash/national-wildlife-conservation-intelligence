@@ -17,3 +17,4 @@ class GlobalIntelligenceRecord(Base):
     """
     __tablename__ = "global_intelligence_record"
     id = Column(Integer, primary_key=True, index=True)
+

@@ -246,3 +246,4 @@ class AccountStatusRequest(BaseModel):
         if self.is_suspended is not None:
             return self.is_suspended
         return not self.is_active
+

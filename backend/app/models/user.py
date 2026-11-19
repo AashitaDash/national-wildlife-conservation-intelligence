@@ -70,3 +70,4 @@ class EmailVerificationToken(Base):
     last_sent_at = Column(DateTime, nullable=False)
     consumed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+

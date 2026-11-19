@@ -82,3 +82,4 @@ Both the backend and frontend stacks are fully listed in the repository.
 
 All versions are taken directly from `backend/requirements.txt` and `frontend/package.json`; no versions have been inferred or fabricated.
 
+

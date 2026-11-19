@@ -167,3 +167,4 @@ def trigger_database_seed(db: Session = Depends(get_db)):
     seed_biodiversity_dataset(db)
     seed_demo_submissions(db, users)
     return {"status": "SUCCESS", "message": "Biodiversity dataset seeded successfully"}
+

@@ -266,3 +266,4 @@ def mark_alert_as_read(
         "is_resolved": alert.is_resolved,
         "message": "Alert marked as read"
     }
+

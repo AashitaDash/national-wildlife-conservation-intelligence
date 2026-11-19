@@ -53,3 +53,4 @@ class PaginatedSpeciesResponse(BaseModel):
     total: int
     page: int
     page_size: int
+

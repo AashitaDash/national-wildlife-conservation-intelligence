@@ -78,3 +78,4 @@ ERROR tests/test_v31_auth_security.py
 
 ---
 *All file references are relative to the repository root.*
+

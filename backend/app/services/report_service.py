@@ -658,3 +658,4 @@ class ReportService:
         pdf_bytes = pdf.output(dest='S').encode('latin1')
         filename = f"{report_type.value.lower()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return pdf_bytes, filename
+

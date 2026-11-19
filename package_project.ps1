@@ -68,3 +68,4 @@ Write-Host "Your teammate simply needs to:" -ForegroundColor Yellow
 Write-Host "  1. Unzip the file" -ForegroundColor White
 Write-Host "  2. In 'frontend', run: npm install" -ForegroundColor White
 Write-Host "  3. Double-click 'run_platform.bat'" -ForegroundColor White
+

@@ -189,3 +189,4 @@ export const ThreatAnalyticsPage: React.FC = () => {
     </div>
   );
 };
+

@@ -33,3 +33,20 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Local environment and database files
+.env.*
+!.env.example
+*.db
+*.db-*
+*.bak
+*.backup*
+*.log
+
+# Local test outputs and temporary artifacts
+backend_test_output.txt
+pytest_results*
+tests/screenshots/
+tests/screenshots_v33/
+frontend_v29_*.png
+scratch_*.py

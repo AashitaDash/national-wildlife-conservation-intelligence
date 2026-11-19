@@ -39,7 +39,9 @@ def test_section_13_example_transformation():
     entities = extractor.extract_entities(text)
 
     species_names = [s["canonical_name"] for s in entities["species"]]
-    location_names = [l["canonical_name"] for l in entities["locations"]]
+    location_names = [l["canonical_name"] for l in entities.get("locations", [])] + [
+        p["canonical_name"] for p in entities.get("protected_areas", [])
+    ]
 
     assert "Asian Elephant" in species_names
     assert any("Similipal" in loc for loc in location_names)
@@ -88,3 +90,4 @@ def test_vector_embeddings_and_cosine_ranking():
     ]
     ranked = VectorEmbedder.rank_documents(emb_a, docs)
     assert ranked[0]["id"] == 2
+

@@ -139,3 +139,4 @@ class QAResponse(BaseModel):
     evidence_strength_rationale: str
     diagnostic_metadata: Optional[Dict[str, Any]] = None
 
+

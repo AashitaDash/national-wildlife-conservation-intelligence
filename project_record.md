@@ -935,3 +935,4 @@ The ingestion and rigorous deduplication of 39,066 real-world observation record
 
 Delivered through a secure, role-based React frontend and powered by a highly performant FastAPI backend, the system meets all established academic and functional requirements. While acknowledging the inherent limitations of public datasets and heuristic models, the platform serves as a highly effective, scalable prototype. It empowers researchers, citizens, and policymakers alike, proving that integrated AI-assisted intelligence is a vital tool in the ongoing effort to protect and preserve global biodiversity.
 
+

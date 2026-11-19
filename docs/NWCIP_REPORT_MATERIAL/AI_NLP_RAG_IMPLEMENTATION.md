@@ -109,3 +109,4 @@ def detect_intent(cls, question: str) -> str:
 
 ---
 *All descriptions, code excerpts, and design decisions are extracted directly from the source files; no invented functionality is present.*
+

@@ -178,3 +178,4 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuToggle }) => {
     </header>
   );
 };
+

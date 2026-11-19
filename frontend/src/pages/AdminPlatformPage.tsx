@@ -476,3 +476,4 @@ export const AdminPlatformPage: React.FC = () => {
     </div>
   );
 };
+

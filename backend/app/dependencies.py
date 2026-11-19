@@ -133,3 +133,4 @@ def require_roles(*allowed_roles: Union[str, Iterable[str]]) -> Callable[[User],
         return current_user
 
     return role_checker
+

@@ -137,3 +137,4 @@ export const FloatingChatWidget: React.FC = () => {
     </div>
   );
 };
+

@@ -716,3 +716,4 @@
 - Column 'approval_status' in table 'users' nullable mismatch: model=False, db=True
 - Column 'is_email_verified' in table 'users' nullable mismatch: model=False, db=True
 - Column 'email_verified_at' in table 'users' type mismatch: model=DATETIME, db=TIMESTAMP
+

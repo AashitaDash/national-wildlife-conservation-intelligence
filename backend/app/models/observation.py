@@ -67,3 +67,4 @@ class Observation(Base):
 
     def __repr__(self):
         return f"<Observation(id={self.id}, species_id={self.species_id}, lat={self.latitude}, lon={self.longitude}, status='{self.verification_status}')>"
+

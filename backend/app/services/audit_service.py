@@ -60,3 +60,4 @@ class AuditService:
             except Exception:
                 pass
             logger.error("Failed to write audit event [%s]: %s", action, exc)
+

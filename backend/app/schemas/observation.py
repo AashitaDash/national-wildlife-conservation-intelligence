@@ -45,3 +45,4 @@ class ObservationFilter(BaseModel):
     verification_status: Optional[str] = None
     limit: Optional[int] = 100
     offset: Optional[int] = 0
+

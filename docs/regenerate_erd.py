@@ -118,3 +118,4 @@ erd_path = project_root / "docs" / "erd.jpg"
 img.save(str(erd_path), "JPEG", quality=95)
 print(f"ER diagram regenerated at {erd_path}")
 
+

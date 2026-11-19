@@ -398,3 +398,4 @@ export const SubmitSightingPage: React.FC = () => {
     </div>
   );
 };
+

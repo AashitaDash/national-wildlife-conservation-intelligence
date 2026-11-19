@@ -15,3 +15,4 @@ Copy-Item -Path "C:\Users\KIIT0001\Downloads\pgvector_temp\share\extension\vecto
 
 Write-Host "Starting PostgreSQL 16 service..."
 Start-Service -Name postgresql-x64-16 -ErrorAction SilentlyContinue
+

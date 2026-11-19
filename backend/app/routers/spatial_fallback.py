@@ -70,3 +70,4 @@ def get_state_biodiversity_metrics_fallback(
         metric_type="static",
         states=metrics,
     )
+

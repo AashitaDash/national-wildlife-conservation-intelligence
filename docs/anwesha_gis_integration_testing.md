@@ -404,3 +404,4 @@ test('getChoroplethColor returns red for CR risk', () => {
 ---
 
 *Prepared by the Antigravity AI assistant for the NWCIP project, aimed at helping Anwesha master GIS integration and testing.*
+

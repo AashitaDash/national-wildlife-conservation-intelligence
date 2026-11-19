@@ -44,3 +44,4 @@ class _FallbackEngine:
 
 # Export as rag_generation_engine to match expected name
 rag_generation_engine = _FallbackEngine()
+

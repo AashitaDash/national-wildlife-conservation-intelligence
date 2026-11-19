@@ -98,3 +98,4 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 // useAuth hook is in src/hooks/useAuth.ts to preserve Vite Fast Refresh compatibility.
+

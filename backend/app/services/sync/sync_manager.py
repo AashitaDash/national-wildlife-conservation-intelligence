@@ -44,3 +44,4 @@ class SyncScheduler:
             self._task = None
         else:
             logger.info("SyncScheduler.shutdown() called but no task was running.")
+

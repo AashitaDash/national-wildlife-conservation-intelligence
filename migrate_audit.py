@@ -13,3 +13,4 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE audit_events ADD COLUMN event_metadata JSON;"))
         conn.commit()
     print("audit_events checked!")
+

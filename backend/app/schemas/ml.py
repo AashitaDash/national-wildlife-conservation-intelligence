@@ -68,3 +68,4 @@ class AcknowledgeAnomalyRequest(BaseModel):
 class ModelMetricsResponse(BaseModel):
     classifier: Dict[str, Any]
     anomaly_detector: Dict[str, Any]
+

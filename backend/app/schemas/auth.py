@@ -181,3 +181,4 @@ class CompleteRegistrationRequest(BaseModel):
             raise ValueError("Invalid account type. Allowed: 'public', 'researcher', 'officer'.")
         return clean
 
+
