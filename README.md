@@ -4,6 +4,18 @@
 
 ---
 
+## Table of Contents
+1. [Executive Overview](#-executive-overview)  
+2. [System Architecture](#-system-architecture)  
+3. [Key Functional Modules](#-key-functional-modules)  
+4. [Demo Personas & Seed Credentials](#-demo-personas--seed-credentials)  
+5. [Technology Stack](#-technology-stack)  
+6. [Quickstart Guide](#-quickstart-guide)  
+7. [Live Verification Checklist](#-live-verification-checklist)  
+8. [Academic Integrity & Scientific Disclaimer](#-academic-integrity--scientific-disclaimer)
+
+---
+
 ## 📌 Executive Overview
 
 The **National Wildlife Conservation Intelligence Platform (NWCIP)** is an integrated, production-grade AI decision-support platform designed to synthesize multi-source biodiversity telemetry, unstructured wildlife enforcement incident dispatches, dense vector semantic retrieval, and machine learning risk heuristics into a single operational interface.
@@ -36,8 +48,8 @@ flowchart TD
     end
 
     subgraph Storage_Engine ["Relational & Vector Storage"]
-        DB[("PostgreSQL / PostGIS (Prod)\nSQLite Fallback (Dev/Offline)")]
-        VEC["384-dim Embedding JSON / FAISS Indexes"]
+        DB[("PostgreSQL / PostGIS (Prod)\nSQLite fallback (Dev/Offline)")]
+        VEC["384-dim Embedding JSON / FAISS indexes"]
     end
 
     subgraph Intelligence_Core ["Analytical & ML Decision Engine"]
@@ -128,34 +140,34 @@ Use the one-click **Persona Switcher** in the top-right navbar, or authenticate 
 - Node.js 18+ & npm
 
 ### 2. Backend Setup
-```powershell
-# Navigate to project root
-cd "C:\Users\Anurag Mukherjee\Desktop\Wildlife Conservation"
+```bash
+# Navigate to the project root (replace with your actual path)
+cd /path/to/Wildlife_Conservation_Shareable
 
 # Install backend dependencies
 pip install -r backend/requirements.txt
 
-# Seed rich demonstration dataset (20 species, 165 observations, 17 docs, 17 anomalies)
+# Seed the demonstration dataset (20 species, 165 observations, 17 docs, 17 anomalies)
 python scripts/seed_demo_data.py
 
-# Launch FastAPI backend (accessible at http://localhost:8000)
+# Launch the FastAPI backend (exposed at http://localhost:8000)
 python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 3. Frontend Setup
-```powershell
-# Navigate to frontend folder
-cd "C:\Users\Anurag Mukherjee\Desktop\Wildlife Conservation\frontend"
+```bash
+# Navigate to the frontend directory
+cd /path/to/Wildlife_Conservation_Shareable/frontend
 
 # Install npm dependencies
 npm install
 
-# Start Vite dev server (accessible at http://localhost:3000)
+# Start the Vite development server (exposed at http://localhost:3000)
 npm run dev
 ```
 
 ### 4. Running Automated Tests
-```powershell
+```bash
 # Run the complete test suite (30 passed in ~25s)
 python -m pytest backend/tests/ -v
 ```
