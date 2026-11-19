@@ -52,4 +52,11 @@ class AuditService:
             db.add(event)
             db.flush()
         except Exception as exc:
+            # Roll back only the failed audit flush so the calling transaction
+            # can still commit its primary change (audit failure must never
+            # block the primary operation).
+            try:
+                db.rollback()
+            except Exception:
+                pass
             logger.error("Failed to write audit event [%s]: %s", action, exc)

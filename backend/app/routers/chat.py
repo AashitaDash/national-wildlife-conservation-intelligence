@@ -3,10 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
-from backend.app.dependencies import get_current_user
+from backend.app.dependencies import get_current_user, require_roles
 from backend.app.models.user import User
 from backend.app.schemas.chat import ChatRequest, ChatResponse
-from backend.app.services.rag_service import rag_retrieval_engine, rag_generation_engine
+from backend.app.services.rag_service import rag_retrieval_engine
+try:
+    from backend.app.services.rag_generation_engine import rag_generation_engine
+except ImportError:
+    from backend.app.services.rag_generation_fallback import rag_generation_engine
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +30,7 @@ router = APIRouter(prefix="/chat", tags=["RAG AI Assistant"])
 def ask_assistant(
     request: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO"))
 ) -> ChatResponse:
     """
     Authenticated endpoint for the RAG chatbot assistant.
@@ -56,7 +60,7 @@ def ask_assistant(
             retrieval_meta=retrieval_meta,
             conversation_history=request.conversation_history
         )
-        
+
         # Attach caller's conversation_id if provided
         if request.conversation_id:
             response.conversation_id = request.conversation_id

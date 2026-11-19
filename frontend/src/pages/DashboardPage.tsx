@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   ShieldAlert, PawPrint, AlertTriangle, Activity,
   ArrowRight, TrendingUp, RefreshCw, Search,
+  BookOpen, Sparkles, MapPin, Feather, Globe, HelpCircle, FileText
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { DemoBanner } from '../components/DemoBanner';
@@ -11,8 +12,8 @@ import { EmptyState } from '../components/EmptyState';
 import { errorMessage } from '../utils/format';
 import { CountUp } from '../components/CountUp';
 import { Skeleton } from '../components/Skeleton';
-import { mlService } from '../services/api';
-import { ConservationIntelligenceOverview } from '../types';
+import { mlService, speciesService } from '../services/api';
+import { ConservationIntelligenceOverview, Species } from '../types';
 import { ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const RISK_COLORS: Record<string, string> = {
@@ -78,10 +79,12 @@ const KpiCard: React.FC<{
 
 // ─────────────────────────────────────────────────────────
 export const DashboardPage: React.FC = () => {
-  const { user, primaryRole } = useAuth();
+  const { user, primaryRole, hasRole } = useAuth();
   const [overview, setOverview] = useState<ConservationIntelligenceOverview | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
+
+  const isPublic = !hasRole('ADMIN') && !hasRole('FOREST_OFFICER') && !hasRole('RESEARCHER') && !hasRole('NGO');
 
   const fetchOverview = async () => {
     setLoading(true);
@@ -104,10 +107,211 @@ export const DashboardPage: React.FC = () => {
 
   const profiles      = overview?.species_risk_profiles ?? [];
   const criticalCount = profiles.filter(p => p.risk_level === 'CRITICAL').length;
-  const riskPieData   = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
-    .map(lvl => ({ name: lvl, value: profiles.filter(p => p.risk_level === lvl).length, color: RISK_COLORS[lvl] }))
+  const ALL_RISK_LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const riskCounts = ALL_RISK_LEVELS.reduce((acc, lvl) => {
+    acc[lvl] = profiles.filter(p => p.risk_level === lvl).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const riskPieData = ALL_RISK_LEVELS
+    .map(lvl => ({ name: lvl, value: riskCounts[lvl], color: RISK_COLORS[lvl] }))
     .filter(d => d.value > 0);
 
+  // ─────────────────────────────────────────────────────────
+  // GENERAL PUBLIC EXPERIENCE — Clean, read-only educational wildlife awareness
+  // ─────────────────────────────────────────────────────────
+  if (isPublic) {
+    return (
+      <div className="space-y-8 animate-fade-slide-in">
+        <DemoBanner />
+
+        {/* ── Public Page header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#e5e0d8] pb-6">
+          <div>
+            <p className="font-mono text-[10px] tracking-widest uppercase font-semibold mb-1" style={{ color: '#11682f' }}>
+              CITIZEN WILDLIFE AWARENESS PORTAL
+            </p>
+            <h1
+              className="font-serif text-3xl font-bold leading-tight"
+              style={{ color: '#1a1916', fontFamily: "'Newsreader', Georgia, serif" }}
+            >
+              National Wildlife & Conservation Overview
+            </h1>
+            <p className="text-sm mt-1" style={{ color: '#77746c' }}>
+              Learn about India&apos;s protected species, ecological sanctuaries, biodiversity habitats, and conservation updates.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/species"
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold tracking-wide transition-all"
+              style={{ backgroundColor: '#11682f', color: '#fff', borderRadius: '3px' }}
+            >
+              <Search className="w-3.5 h-3.5" />
+              EXPLORE SPECIES REGISTRY
+            </Link>
+          </div>
+        </div>
+
+        {/* ── Public Statistics Overview ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            to="/species"
+            label="Monitored Species"
+            value={loading ? <Skeleton className="h-7 w-12 inline-block" /> : <CountUp value={overview?.total_species_monitored ?? 0} />}
+            subtext="Catalogued indigenous species"
+            icon={<PawPrint className="w-4 h-4" />}
+            accent="#16a34a"
+          />
+          <div className="bg-white border border-[#e5e0d8] p-5 rounded-sm shadow-sm">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <span className="font-mono text-[10px] tracking-widest uppercase font-semibold" style={{ color: '#94918a' }}>
+                Protected Sanctuaries
+              </span>
+              <div className="w-7 h-7 flex items-center justify-center shrink-0 bg-[#0891b218] rounded-xs text-[#0891b2]">
+                <Globe className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="font-mono text-3xl font-bold mb-1 text-[#1a1916]">
+              106+
+            </div>
+            <p className="font-mono text-[10px] text-[#94918a]">National parks & biosphere reserves</p>
+          </div>
+          <div className="bg-white border border-[#e5e0d8] p-5 rounded-sm shadow-sm">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <span className="font-mono text-[10px] tracking-widest uppercase font-semibold" style={{ color: '#94918a' }}>
+                Recorded Sightings
+              </span>
+              <div className="w-7 h-7 flex items-center justify-center shrink-0 bg-[#ea580c18] rounded-xs text-[#ea580c]">
+                <Activity className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="font-mono text-3xl font-bold mb-1 text-[#1a1916]">
+              {loading ? <Skeleton className="h-7 w-14 inline-block" /> : <CountUp value={overview?.total_observations_recorded ?? 0} />}
+            </div>
+            <p className="font-mono text-[10px] text-[#94918a]">Verified field observations</p>
+          </div>
+          <Link to="/map" className="block">
+            <div className="bg-white border border-[#e5e0d8] p-5 rounded-sm shadow-sm hover:border-[#11682f] transition-colors">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <span className="font-mono text-[10px] tracking-widest uppercase font-semibold" style={{ color: '#94918a' }}>
+                  Spatial Map
+                </span>
+                <div className="w-7 h-7 flex items-center justify-center shrink-0 bg-[#16a34a18] rounded-xs text-[#16a34a]">
+                  <MapPin className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="font-mono text-2xl font-bold mb-1 text-[#11682f]">
+                Explore
+              </div>
+              <p className="font-mono text-[10px] text-[#94918a]">Interactive wildlife map & habitats</p>
+            </div>
+          </Link>
+        </div>
+
+        {/* ── Public Educational Content & Verified Updates ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Featured Species Awareness */}
+          <Card className="lg:col-span-2 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#f0ede6] pb-3">
+              <div>
+                <SectionLabel>SPECIES SPOTLIGHT & BIODIVERSITY</SectionLabel>
+                <h3 className="font-serif font-bold text-lg text-[#1f1e1a]">India&apos;s Iconic Wildlife Heritage</h3>
+              </div>
+              <Link to="/species" className="text-xs font-mono font-bold text-[#11682f] hover:underline flex items-center gap-1">
+                View All <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <p className="text-xs text-[#736f66] leading-relaxed">
+              India is home to nearly 7-8% of all recorded biodiversity globally across rich forest, wetland, mountain, and coastal ecosystems.
+              Explore our national species registry to learn about habitats, dietary behaviors, and regional distribution.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="p-3.5 rounded border border-[#f0ede6] bg-[#fdfcfa]">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#11682f]"></span>
+                  <h4 className="font-semibold text-xs text-[#1f1e1a]">Royal Bengal Tiger (Panthera tigris)</h4>
+                </div>
+                <p className="text-[11px] text-[#736f66] leading-normal">
+                  Apex carnivore native to Sundarbans, Western Ghats, and Central Indian tiger corridors. Focus of Project Tiger conservation initiatives.
+                </p>
+              </div>
+              <div className="p-3.5 rounded border border-[#f0ede6] bg-[#fdfcfa]">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#11682f]"></span>
+                  <h4 className="font-semibold text-xs text-[#1f1e1a]">Asian Elephant (Elephas maximus)</h4>
+                </div>
+                <p className="text-[11px] text-[#736f66] leading-normal">
+                  Keystone herbivore shaping forest vegetation across elephant reserves in Southern, Central, and North-Eastern India.
+                </p>
+              </div>
+              <div className="p-3.5 rounded border border-[#f0ede6] bg-[#fdfcfa]">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#11682f]"></span>
+                  <h4 className="font-semibold text-xs text-[#1f1e1a]">Great Indian One-Horned Rhinoceros</h4>
+                </div>
+                <p className="text-[11px] text-[#736f66] leading-normal">
+                  Rebounded from near extinction in Kaziranga and Manas floodplains through dedicated anti-poaching and flood shelter management.
+                </p>
+              </div>
+              <div className="p-3.5 rounded border border-[#f0ede6] bg-[#fdfcfa]">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#11682f]"></span>
+                  <h4 className="font-semibold text-xs text-[#1f1e1a]">Snow Leopard (Panthera uncia)</h4>
+                </div>
+                <p className="text-[11px] text-[#736f66] leading-normal">
+                  Solitary high-altitude predator inhabiting alpine and sub-alpine regions of Ladakh, Himachal Pradesh, and Uttarakhand.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Conservation Education & Threats Overview */}
+          <Card className="p-6 flex flex-col justify-between">
+            <div>
+              <SectionLabel>COMMUNITY CONSERVATION</SectionLabel>
+              <h3 className="font-serif font-bold text-lg text-[#1f1e1a] mb-2">Threats & Wildlife Protection</h3>
+              <p className="text-xs text-[#736f66] leading-relaxed mb-4">
+                Understanding human-wildlife coexistence, forest encroachment, and climate impacts helps communities support sustainable ecosystems.
+              </p>
+              <div className="space-y-3">
+                <div className="p-3 bg-[#faf9f6] rounded border border-[#f0ede6]">
+                  <span className="font-mono text-[10px] font-bold text-[#b45309] uppercase block mb-1">
+                    Habitat Fragmentation
+                  </span>
+                  <p className="text-[11px] text-[#736f66]">
+                    Linear infrastructure and development divide contiguous forest corridors, creating challenges for migratory megafauna.
+                  </p>
+                </div>
+                <div className="p-3 bg-[#faf9f6] rounded border border-[#f0ede6]">
+                  <span className="font-mono text-[10px] font-bold text-[#11682f] uppercase block mb-1">
+                    Community Coexistence
+                  </span>
+                  <p className="text-[11px] text-[#736f66]">
+                    Eco-development committees and prompt conflict mitigation empower fringe villages living adjacent to protected forests.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[#f0ede6]">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#11682f] font-semibold">
+                <BookOpen className="w-4 h-4" />
+                <span>Wildlife Protection Act, 1972</span>
+              </div>
+              <p className="text-[10px] text-[#94918a] mt-1">
+                All wildlife sightings are verified by authorized Forest Officers before inclusion in the national registry.
+              </p>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // PRIVILEGED / OPERATIONAL DASHBOARD (Officers, Researchers, Admins)
+  // ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-8 animate-fade-slide-in">
       <DemoBanner />
@@ -246,7 +450,20 @@ export const DashboardPage: React.FC = () => {
                         color: '#1a1916',
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }} />
+                    <Legend
+                      wrapperStyle={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace" }}
+                      content={() => (
+                        <div className="flex items-center justify-center gap-4 mt-2 flex-wrap text-[11px] font-mono">
+                          {ALL_RISK_LEVELS.map(lvl => (
+                            <div key={lvl} className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: RISK_COLORS[lvl] }} />
+                              <span style={{ color: '#484640' }}>{lvl}</span>
+                              <span className="font-bold text-[#1a1916]">({riskCounts[lvl] ?? 0})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

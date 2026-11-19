@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 
@@ -21,6 +21,11 @@ class ThreatExtractionItem(BaseModel):
     category_name: str
     mention_count: int
     confidence_score: float
+    evidence_status: Optional[str] = "REPORTED_SOURCE"
+    supporting_passage: Optional[str] = None
+    section_type: Optional[str] = "BODY"
+    score_type: Optional[str] = "CALIBRATED_PROBABILITY"
+    explanation: Optional[str] = None
 
 
 class SpeciesExtractionItem(BaseModel):
@@ -28,23 +33,25 @@ class SpeciesExtractionItem(BaseModel):
     common_name: str
     scientific_name: str
     mention_count: int
+    evidence_passage: Optional[str] = None
 
 
 class DocumentResponse(BaseModel):
     id: int
     title: str
     source_type: str
+    document_type: Optional[str] = "GENERAL_CONSERVATION_DOC"
     author: Optional[str] = None
     publication_date: Optional[datetime] = None
     url: Optional[str] = None
     summary: Optional[str] = None
     topics: Optional[List[str]] = None
+    topic_breakdown: Optional[List[Dict[str, Any]]] = None
     created_at: Optional[datetime] = None
     species_mentions: Optional[List[SpeciesExtractionItem]] = []
     threat_mentions: Optional[List[ThreatExtractionItem]] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentDetailResponse(DocumentResponse):

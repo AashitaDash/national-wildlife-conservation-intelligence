@@ -17,6 +17,14 @@ import {
   Check,
   X,
   MessageSquare,
+  Bot,
+  FileText,
+  AlertOctagon,
+  ShieldAlert,
+  PlusCircle,
+  FileCheck,
+  DownloadCloud,
+  ChevronRight
 } from 'lucide-react';
 import { officerService } from '../services/api';
 import { Submission, OfficerQueueStats } from '../types';
@@ -138,9 +146,100 @@ export const OfficerDashboardPage: React.FC = () => {
           </div>
           <h1 className="text-3xl font-serif font-bold text-[#1f1e1a]">Forest Officer Command</h1>
           <p className="text-sm text-[#736f66] mt-1">
-            Review, audit, and authenticate researcher field submissions prior to inclusion in the official wildlife registry.
+            Field-focused operational workspace: inspect incident alerts, audit submissions, navigate GIS spatial intel, and record field observations.
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/submit"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#11682f] hover:bg-[#0e5426] text-white text-xs font-mono font-bold tracking-wider uppercase rounded shadow-sm transition-colors"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Field Observation / Incident Report
+          </Link>
+          <Link
+            to="/my-submissions"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-[#faf9f6] border border-[#d6d2c7] text-[#2c2b27] text-xs font-mono font-bold tracking-wider uppercase rounded transition-colors"
+          >
+            <FileCheck className="w-4 h-4 text-[#11682f]" />
+            Field Records
+          </Link>
+        </div>
+      </div>
+
+      {/* Mandatory Field Tools — AI Assistant & NLP / Ask the Corpus (Both Mandatory) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Link
+          to="/assistant"
+          className="group p-4 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#11682f] hover:shadow-md transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-8 h-8 rounded bg-[#11682f15] text-[#11682f] flex items-center justify-center group-hover:bg-[#11682f] group-hover:text-white transition-colors">
+              <Bot className="w-4 h-4" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#11682f]">Mandatory</span>
+          </div>
+          <div>
+            <h4 className="font-serif font-bold text-sm text-[#1f1e1a]">AI Assistant</h4>
+            <p className="text-[11px] text-[#736f66] mt-0.5 leading-snug">
+              Operational RAG query assistant grounded in verified conservation data.
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          to="/documents"
+          className="group p-4 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#0891b2] hover:shadow-md transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-8 h-8 rounded bg-[#0891b215] text-[#0891b2] flex items-center justify-center group-hover:bg-[#0891b2] group-hover:text-white transition-colors">
+              <FileText className="w-4 h-4" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#0891b2]">Mandatory</span>
+          </div>
+          <div>
+            <h4 className="font-serif font-bold text-sm text-[#1f1e1a]">NLP / Ask Corpus</h4>
+            <p className="text-[11px] text-[#736f66] mt-0.5 leading-snug">
+              Search patrol logs, incident dispatches, and conservation documents.
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          to="/map"
+          className="group p-4 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#16a34a] hover:shadow-md transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-8 h-8 rounded bg-[#16a34a15] text-[#16a34a] flex items-center justify-center group-hover:bg-[#16a34a] group-hover:text-white transition-colors">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#16a34a]">GIS</span>
+          </div>
+          <div>
+            <h4 className="font-serif font-bold text-sm text-[#1f1e1a]">GIS Spatial Map</h4>
+            <p className="text-[11px] text-[#736f66] mt-0.5 leading-snug">
+              Inspect georeferenced sightings, patrol tracks, and sensitive coordinates.
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          to="/alerts"
+          className="group p-4 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#dc2626] hover:shadow-md transition-all flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="w-8 h-8 rounded bg-[#dc262615] text-[#dc2626] flex items-center justify-center group-hover:bg-[#dc2626] group-hover:text-white transition-colors">
+              <AlertOctagon className="w-4 h-4" />
+            </div>
+            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#dc2626]">Real-time</span>
+          </div>
+          <div>
+            <h4 className="font-serif font-bold text-sm text-[#1f1e1a]">Threat Alerts</h4>
+            <p className="text-[11px] text-[#736f66] mt-0.5 leading-snug">
+              Poaching threats, human-wildlife conflict hotspots, and ML anomalies.
+            </p>
+          </div>
+        </Link>
       </div>
 
       {/* Metrics Row */}

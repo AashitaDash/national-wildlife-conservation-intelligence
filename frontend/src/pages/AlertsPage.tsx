@@ -126,6 +126,12 @@ export const AlertsPage: React.FC = () => {
     return true;
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  const totalPages = Math.ceil(filteredAlerts.length / PAGE_SIZE) || 1;
+  const pagedAlerts = filteredAlerts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <DemoBanner />
@@ -160,7 +166,7 @@ export const AlertsPage: React.FC = () => {
             return (
               <button
                 key={sev}
-                onClick={() => setSeverityFilter(sev)}
+                onClick={() => { setSeverityFilter(sev); setCurrentPage(1); }}
                 className={`px-3 py-1.5 transition-all border ${
                   severityFilter === sev
                     ? 'bg-[#1a1916] text-white border-[#1a1916]'
@@ -174,7 +180,7 @@ export const AlertsPage: React.FC = () => {
           })}
           <span className="w-px h-4 mx-1" style={{ backgroundColor: '#e5e0d8' }} />
           <button
-            onClick={() => setUnreadOnly((v) => !v)}
+            onClick={() => { setUnreadOnly((v) => !v); setCurrentPage(1); }}
             className={`px-3 py-1.5 transition-all border flex items-center gap-1.5 ${
               unreadOnly
                 ? 'bg-[#dc2626] text-white border-[#dc2626]'
@@ -194,7 +200,7 @@ export const AlertsPage: React.FC = () => {
             type="text"
             placeholder="Search alerts or species..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="w-full pl-8 pr-3 py-1 text-xs border border-[#e5e0d8] rounded focus:outline-none focus:border-[#13843a] bg-[#fdfaf5]"
           />
         </div>
@@ -228,7 +234,7 @@ export const AlertsPage: React.FC = () => {
         />
       ) : (
         <div className="space-y-3">
-          {filteredAlerts.map((al, idx) => {
+          {pagedAlerts.map((al, idx) => {
             const styles = severityStyles[al.severity] || severityStyles.MEDIUM;
             const isExpanded = expandedId === al.id;
             return (
@@ -287,6 +293,34 @@ export const AlertsPage: React.FC = () => {
               </button>
             );
           })}
+
+          {/* Pagination bar */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-3 border-t border-[#e5e0d8] text-xs font-mono">
+              <span className="text-[#94918a]">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1} &ndash; {Math.min(currentPage * PAGE_SIZE, filteredAlerts.length)} of {filteredAlerts.length}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1 bg-white border border-[#e5e0d8] disabled:opacity-40 text-[#1a1916] rounded-sm hover:border-[#1a1916]"
+                >
+                  PREV
+                </button>
+                <span className="px-2 text-[#77746c]">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1 bg-white border border-[#e5e0d8] disabled:opacity-40 text-[#1a1916] rounded-sm hover:border-[#1a1916]"
+                >
+                  NEXT
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

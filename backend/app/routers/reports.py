@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import io
 
-from backend.app.dependencies import get_db, get_current_active_user
+from backend.app.dependencies import get_db, get_current_active_user, require_roles
 from backend.app.models.user import User
 from backend.app.schemas.report import (
     ReportType,
@@ -22,11 +22,11 @@ router = APIRouter(prefix="/reports", tags=["Conservation Intelligence Reports"]
 
 @router.get("/types", response_model=List[ReportTypeMetadata])
 def get_report_types(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     List available conservation report templates, supported formats, and valid filters.
-    Available to all authenticated personnel.
+    Available to research and operational personnel.
     """
     return ReportService.get_supported_types()
 
@@ -35,7 +35,7 @@ def get_report_types(
 def preview_report(
     payload: ReportPreviewRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     Calculate dynamic scope and summary aggregations before full report generation.
@@ -56,7 +56,7 @@ def preview_report(
 def generate_report(
     payload: ReportGenerateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     Compile real conservation data and stream the generated file (PDF, CSV, or XLSX).

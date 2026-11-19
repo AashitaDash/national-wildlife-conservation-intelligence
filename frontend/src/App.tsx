@@ -24,6 +24,7 @@ import { MySubmissionsPage } from './pages/MySubmissionsPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { OfficerDashboardPage } from './pages/OfficerDashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { AwarenessHubPage } from './pages/AwarenessHubPage';
 import { FloatingChatWidget } from './components/FloatingChatWidget';
 
 // Determines whether to show the app shell (Navbar + Sidebar)
@@ -75,34 +76,43 @@ export const App: React.FC = () => {
             <Route path="/login"    element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
-            {/* Protected Core Platform Routes */}
+            {/* Protected Core Platform Routes — Accessible to All Authenticated Users */}
             <Route element={<ProtectedRoute />}>
               <Route path="/"          element={<DashboardPage />} />
-              <Route path="/assistant" element={<AIAssistantPage />} />
-              <Route path="/search"    element={<SearchPage />} />
+              <Route path="/awareness" element={<AwarenessHubPage />} />
               <Route path="/species"   element={<SpeciesCatalogPage />} />
               <Route path="/species/:id" element={<SpeciesDetailPage />} />
-              <Route path="/map"       element={<InteractiveMapPage />} />
-              <Route path="/threats"   element={<ThreatAnalyticsPage />} />
+              <Route path="/search"    element={<SearchPage />} />
+            </Route>
+
+            {/* Researcher & Officer & Admin Shared Intelligence Routes */}
+            <Route element={<ProtectedRoute roles={['RESEARCHER', 'FOREST_OFFICER', 'ADMIN', 'NGO']} />}>
+              <Route path="/assistant" element={<AIAssistantPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
-              <Route path="/alerts"    element={<AlertsPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/threats"   element={<ThreatAnalyticsPage />} />
+              <Route path="/map"       element={<InteractiveMapPage />} />
               <Route path="/reports"   element={<ReportsPage />} />
             </Route>
 
-            {/* Researcher & Admin Routes */}
-            <Route element={<ProtectedRoute roles={['RESEARCHER', 'ADMIN']} />}>
-              <Route path="/researcher"     element={<ResearcherDashboardPage />} />
+            {/* Officer & Admin Specific Operational Alerts */}
+            <Route element={<ProtectedRoute roles={['FOREST_OFFICER', 'ADMIN']} />}>
+              <Route path="/alerts"    element={<AlertsPage />} />
+              <Route path="/officer"   element={<OfficerDashboardPage />} />
+            </Route>
+
+            {/* Field Submission & Observation Workflows (Researcher, Officer, NGO) */}
+            <Route element={<ProtectedRoute roles={['RESEARCHER', 'FOREST_OFFICER', 'NGO']} />}>
               <Route path="/submit"         element={<SubmitSightingPage />} />
               <Route path="/my-submissions" element={<MySubmissionsPage />} />
+              <Route path="/leaderboard"    element={<LeaderboardPage />} />
             </Route>
 
-            {/* Officer & Admin Routes */}
-            <Route element={<ProtectedRoute roles={['FOREST_OFFICER', 'ADMIN']} />}>
-              <Route path="/officer" element={<OfficerDashboardPage />} />
+            {/* Researcher Workspace */}
+            <Route element={<ProtectedRoute roles={['RESEARCHER', 'ADMIN']} />}>
+              <Route path="/researcher"     element={<ResearcherDashboardPage />} />
             </Route>
 
-            {/* Admin Only Route */}
+            {/* Admin Governance Only Route */}
             <Route element={<ProtectedRoute roles={['ADMIN']} />}>
               <Route path="/admin" element={<AdminPlatformPage />} />
             </Route>

@@ -12,11 +12,22 @@ import {
   FileCheck,
   ChevronRight,
   Sparkles,
+  Bot,
+  FileText,
+  Search,
+  DownloadCloud,
+  MapPin,
+  Calendar,
+  User,
+  ShieldCheck,
+  Activity
 } from 'lucide-react';
 import { submissionService, gamificationService } from '../services/api';
 import { Submission, ResearcherProfile } from '../types';
+import { useAuth } from '../hooks/useAuth';
 
 export const ResearcherDashboardPage: React.FC = () => {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<ResearcherProfile | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -74,6 +85,47 @@ export const ResearcherDashboardPage: React.FC = () => {
             Leaderboard
           </Link>
         </div>
+      </div>
+
+      {/* Mandatory Research Tools — AI Assistant & NLP / Ask the Corpus */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link
+          to="/assistant"
+          className="group p-5 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#11682f] hover:shadow-md transition-all flex items-start gap-4"
+        >
+          <div className="w-10 h-10 rounded bg-[#11682f15] text-[#11682f] flex items-center justify-center shrink-0 group-hover:bg-[#11682f] group-hover:text-white transition-colors">
+            <Bot className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#11682f]">Evidence-Grounded AI</span>
+              <ChevronRight className="w-4 h-4 text-[#736f66] group-hover:text-[#11682f] group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <h3 className="font-serif font-bold text-base text-[#1f1e1a] mt-0.5">Conservation AI Assistant</h3>
+            <p className="text-xs text-[#736f66] mt-1">
+              Ask questions grounded strictly in national species databases, risk rankings, and spatial evidence with strict source attribution.
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          to="/documents"
+          className="group p-5 rounded border border-[#e2ded5] bg-white shadow-sm hover:border-[#0891b2] hover:shadow-md transition-all flex items-start gap-4"
+        >
+          <div className="w-10 h-10 rounded bg-[#0891b215] text-[#0891b2] flex items-center justify-center shrink-0 group-hover:bg-[#0891b2] group-hover:text-white transition-colors">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#0891b2]">Corpus Intelligence & QA</span>
+              <ChevronRight className="w-4 h-4 text-[#736f66] group-hover:text-[#0891b2] group-hover:translate-x-0.5 transition-all" />
+            </div>
+            <h3 className="font-serif font-bold text-base text-[#1f1e1a] mt-0.5">NLP / Ask the Corpus</h3>
+            <p className="text-xs text-[#736f66] mt-1">
+              Upload research papers and query the unstructured conservation corpus with hybrid retrieval, topic extraction, and entity linking.
+            </p>
+          </div>
+        </Link>
       </div>
 
       {/* Gamification / Impact Progress */}
@@ -272,6 +324,76 @@ export const ResearcherDashboardPage: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Verified Researcher Profile Card & Genuine Achievements */}
+      <div className="bg-white rounded border border-[#e2ded5] shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#e2ded5] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-[#11682f] text-white flex items-center justify-center font-bold text-lg font-mono">
+              {(user?.full_name || user?.username || 'R').slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif font-bold text-xl text-[#1f1e1a]">{user?.full_name || user?.username || 'Authenticated Researcher'}</h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#d8f3e1] text-[#11682f]">
+                  VERIFIED RESEARCHER
+                </span>
+              </div>
+              <p className="text-xs text-[#736f66] mt-0.5">
+                Username: @{user?.username} · Email: {user?.email}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-mono">
+            <div className="text-right">
+              <span className="text-[#94918a] block text-[10px] uppercase">Total Submissions</span>
+              <span className="text-base font-bold text-[#1f1e1a]">{submissions.length}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[#94918a] block text-[10px] uppercase">Latest Contribution</span>
+              <span className="text-base font-bold text-[#11682f]">
+                {submissions.length > 0 && submissions[0].created_at
+                  ? new Date(submissions[0].created_at).toLocaleDateString()
+                  : 'No records'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Genuine Database-backed Badges */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#736f66]">
+              Earned Conservation Badges ({profile?.badges?.length ?? 0})
+            </span>
+            <span className="text-[11px] font-mono text-[#94918a]">Calculated strictly from database records</span>
+          </div>
+
+          {!profile?.badges || profile.badges.length === 0 ? (
+            <div className="p-4 rounded bg-[#faf9f6] border border-[#f0ede6] text-xs text-[#736f66] text-center font-mono">
+              No badges awarded yet. Submit verified observations to earn official field badges.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {profile.badges.map((b) => (
+                <div
+                  key={b.code}
+                  className="p-3.5 rounded border border-[#f0ede6] bg-[#fdfcfa] flex items-start gap-3"
+                >
+                  <span className="text-2xl shrink-0">{b.icon_emoji || '🏅'}</span>
+                  <div>
+                    <h5 className="font-serif font-bold text-xs text-[#1f1e1a]">{b.name}</h5>
+                    <p className="text-[11px] text-[#736f66] mt-0.5 leading-snug">{b.description}</p>
+                    <span className="text-[9px] font-mono text-[#94918a] block mt-1">
+                      Awarded: {new Date(b.awarded_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

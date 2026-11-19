@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     EBIRD_API_KEY: Optional[str] = None
     IUCN_API_KEY: Optional[str] = None
     IUCN_API_TOKEN: Optional[str] = None
+    PROTECTED_PLANET_API_KEY: Optional[str] = None
+    SEMANTIC_SCHOLAR_API_KEY: Optional[str] = None
 
     # NLP & Machine Learning Settings
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
@@ -58,6 +60,18 @@ class Settings(BaseSettings):
     RARE_SPECIES_IUCN: str = "CR,EN,VU"
     # Active user window in hours
     ACTIVE_USER_WINDOW_HOURS: int = 24
+
+    # Email / SMTP Configuration (Optional, falls back to safe mock delivery)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_TLS: bool = True
+    EMAIL_FROM: str = "noreply@wildlife.gov.in"
+    EMAIL_VERIFICATION_EXPIRY_MINUTES: int = 15
+    EMAIL_RESEND_COOLDOWN_SECONDS: int = 60
+    MAX_RESEND_ATTEMPTS: int = 5
+    MAX_VERIFY_ATTEMPTS: int = 5
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),

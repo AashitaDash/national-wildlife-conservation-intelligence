@@ -49,6 +49,8 @@ ROLE_PASSWORDS = {
     "ADMIN": "Admin@123",
     "RESEARCHER": "Researcher@123",
     "FOREST_OFFICER": "Officer@123",
+    "CITIZEN": "Citizen@123",
+    "NGO": "Ngo@123",
 }
 
 
@@ -61,50 +63,77 @@ def seed_demo_users(db: Session) -> dict[str, User]:
     roles = {r.name: r for r in db.query(Role).all()}
 
     demo_user_specs = [
-        # 2 Admin accounts
-        {
-            "email": "admin@wildlife.com",
-            "full_name": "Dr. Rajeshwar Sen (Admin)",
-            "role": "ADMIN",
-            "organization": "Wildlife Institute of India",
-        },
+        # Canonical 4 Primary Demo Roles (matching run_platform.bat and UI presets)
         {
             "email": "admin@wildlife.gov.in",
+            "username": "admin",
             "full_name": "National Surveillance Director",
             "role": "ADMIN",
             "organization": "Ministry of Environment, Forest & Climate Change",
         },
-        # 3 Researcher accounts
         {
-            "email": "researcher@wildlife.com",
-            "full_name": "Dr. Ananya Roy (Lead Researcher)",
-            "role": "RESEARCHER",
-            "organization": "Centre for Wildlife Studies",
+            "email": "officer@forest.gov.in",
+            "username": "officer",
+            "full_name": "Ranger Sharma (Field Inspector)",
+            "role": "FOREST_OFFICER",
+            "organization": "Tiger Reserve Command",
         },
         {
             "email": "researcher@wildlife.gov.in",
+            "username": "researcher",
             "full_name": "Priya Nambiar (Field Biologist)",
             "role": "RESEARCHER",
             "organization": "Aaranyak Biodiversity Initiative",
         },
         {
+            "email": "citizen@gmail.com",
+            "username": "citizen",
+            "full_name": "Aarav Sharma (Nature Observer)",
+            "role": "CITIZEN",
+            "organization": "Community Wildlife Observer",
+        },
+        # Additional supporting accounts with distinct non-colliding usernames
+        {
+            "email": "admin@wildlife.com",
+            "username": "admin_sen",
+            "full_name": "Dr. Rajeshwar Sen (Admin)",
+            "role": "ADMIN",
+            "organization": "Wildlife Institute of India",
+        },
+        {
+            "email": "researcher@wildlife.com",
+            "username": "researcher_roy",
+            "full_name": "Dr. Ananya Roy (Lead Researcher)",
+            "role": "RESEARCHER",
+            "organization": "Centre for Wildlife Studies",
+        },
+        {
             "email": "researcher_test@wildlife.gov.in",
+            "username": "researcher_salim",
             "full_name": "Dr. Salim Researcher",
             "role": "RESEARCHER",
             "organization": "Bombay Natural History Society",
         },
-        # 2 Forest Officer accounts
         {
             "email": "officer@wildlife.com",
+            "username": "officer_rathore",
             "full_name": "Vikram Rathore (Divisional Forest Officer)",
             "role": "FOREST_OFFICER",
             "organization": "State Forest Department",
         },
         {
-            "email": "officer@forest.gov.in",
-            "full_name": "Ranger Sharma (Field Inspector)",
-            "role": "FOREST_OFFICER",
-            "organization": "Tiger Reserve Command",
+            "email": "public@wildlife.org",
+            "username": "public_observer",
+            "full_name": "Neha Patel (Public Contributor)",
+            "role": "CITIZEN",
+            "organization": "General Public / Citizen Science",
+        },
+        {
+            "email": "ngo@wwfindia.org",
+            "username": "ngo",
+            "full_name": "Sunita Rao (Conservation Lead)",
+            "role": "NGO",
+            "organization": "WWF India Biodiversity Division",
         },
     ]
 
@@ -117,9 +146,11 @@ def seed_demo_users(db: Session) -> dict[str, User]:
         if not role:
             raise RuntimeError(f"Role {spec['role']} not found in database.")
 
+        desired_username = spec.get("username") or spec["email"].split("@")[0]
         if not user:
             pwd = ROLE_PASSWORDS.get(spec["role"], DEFAULT_DEMO_PASSWORD)
             user = User(
+                username=desired_username,
                 email=spec["email"],
                 hashed_password=AuthService.hash_password(pwd),
                 full_name=spec["full_name"],
@@ -127,6 +158,7 @@ def seed_demo_users(db: Session) -> dict[str, User]:
                 role_id=role.id,
                 is_active=True,
                 is_suspended=False,
+                approval_status="APPROVED",
                 last_active_at=now,
             )
             db.add(user)
@@ -134,11 +166,14 @@ def seed_demo_users(db: Session) -> dict[str, User]:
         else:
             pwd = ROLE_PASSWORDS.get(spec["role"], DEFAULT_DEMO_PASSWORD)
             user.full_name = spec["full_name"]
+            if not getattr(user, "username", None):
+                user.username = desired_username
             user.organization = spec["organization"]
             user.role_id = role.id
             user.hashed_password = AuthService.hash_password(pwd)
             user.is_active = True
             user.is_suspended = False
+            user.approval_status = "APPROVED"
             user.last_active_at = now
             db.flush()
 

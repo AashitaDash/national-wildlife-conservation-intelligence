@@ -4,13 +4,21 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ChatPanel } from './ChatPanel';
 import { chatService } from '../services/api';
 import { ChatMessage } from '../types';
+import { useAuth } from '../hooks/useAuth';
 
 export const FloatingChatWidget: React.FC = () => {
+  const { user, hasRole, primaryRole } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // If not logged in, or if user is General Public (CITIZEN / VIEWER), DO NOT show the AI Assistant widget
+  const isPrivileged = hasRole('RESEARCHER') || hasRole('FOREST_OFFICER') || hasRole('ADMIN') || hasRole('NGO');
+  if (!user || !isPrivileged) {
+    return null;
+  }
 
   // If already on the dedicated /assistant page, hide floating launcher to prevent duplicate interfaces
   if (location.pathname === '/assistant') {

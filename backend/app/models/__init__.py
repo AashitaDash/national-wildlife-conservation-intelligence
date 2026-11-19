@@ -43,4 +43,8 @@ __all__ = [
     "UserBadge",
     "Notification",
     "AuditEvent",
+    "GlobalSourceRegistry",
+    "GlobalIntelligenceRecord",
 ]
+
+from backend.app.models.global_intelligence import GlobalSourceRegistry, GlobalIntelligenceRecord

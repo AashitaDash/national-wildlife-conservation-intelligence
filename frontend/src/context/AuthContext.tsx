@@ -7,7 +7,8 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<User>;
-  register: (userData: { username: string; email: string; password: string; full_name?: string }) => Promise<void>;
+  register: (userData: { username: string; email: string; password: string; full_name: string }) => Promise<void>;
+  setAuthSession: (session: { access_token: string; user: User }) => void;
   logout: () => void;
   hasRole: (roles: RoleName | RoleName[]) => boolean;
   primaryRole: RoleName;
@@ -45,17 +46,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return res.user;
   };
 
-  const register = async (userData: { username: string; email: string; password: string; full_name?: string }) => {
+  const register = async (userData: { username: string; email: string; password: string; full_name: string }) => {
     const res = await authService.register(userData);
-    // Backend returns an empty access_token on register (user must login separately).
-    // Do NOT store an empty token — that would trigger a getCurrentUser() call with
-    // an empty Bearer header and immediately kick off a logout() loop.
     if (res.access_token) {
       localStorage.setItem('token', res.access_token);
       setToken(res.access_token);
       setUser(res.user);
     }
-    // If no token returned, just let the caller redirect to /login
+  };
+
+  const setAuthSession = (session: { access_token: string; user: User }) => {
+    localStorage.setItem('token', session.access_token);
+    setToken(session.access_token);
+    setUser(session.user);
   };
 
   const logout = () => {
@@ -83,6 +86,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loading,
         login,
         register,
+        setAuthSession,
         logout,
         hasRole,
         primaryRole,

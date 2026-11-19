@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ── Request schemas ────────────────────────────────────────────────────────────
@@ -78,8 +78,7 @@ class SubmissionImageResponse(BaseModel):
     file_size_bytes: Optional[int] = None
     uploaded_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Verification decision ──────────────────────────────────────────────────────
@@ -93,8 +92,7 @@ class DecisionResponse(BaseModel):
     note: Optional[str] = None
     decided_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OfficerDecisionRequest(BaseModel):
@@ -134,8 +132,7 @@ class SubmissionResponse(BaseModel):
     created_at: Optional[datetime.datetime] = None
     updated_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Gamification schemas ───────────────────────────────────────────────────────
@@ -184,8 +181,7 @@ class NotificationResponse(BaseModel):
     badge_code: Optional[str] = None
     created_at: Optional[datetime.datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Admin schemas ──────────────────────────────────────────────────────────────
@@ -193,7 +189,13 @@ class NotificationResponse(BaseModel):
 class AdminUserResponse(BaseModel):
     id: int
     email: str
+    username: Optional[str] = None
     full_name: str
+    approval_status: Optional[str] = 'APPROVED'
+    approved_by_id: Optional[int] = None
+    approved_at: Optional[datetime.datetime] = None
+    role_assigned_by_id: Optional[int] = None
+    role_assigned_at: Optional[datetime.datetime] = None
     organization: Optional[str] = None
     is_active: bool
     is_suspended: bool
@@ -203,8 +205,7 @@ class AdminUserResponse(BaseModel):
     submission_count: int = 0
     verified_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AdminPlatformStats(BaseModel):

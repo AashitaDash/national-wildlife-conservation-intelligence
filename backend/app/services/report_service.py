@@ -561,156 +561,100 @@ class ReportService:
     @classmethod
     def generate_pdf(cls, report_type: ReportType, filters: ReportFilterOptions, db: Session) -> Tuple[bytes, str]:
         data = cls._compile_data(report_type, filters, db)
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buf,
-            pagesize=letter,
-            rightMargin=40,
-            leftMargin=40,
-            topMargin=40,
-            bottomMargin=40,
-        )
 
-        styles = getSampleStyleSheet()
-        # Custom palette & typography
-        title_style = ParagraphStyle(
-            "DocTitle",
-            parent=styles["Normal"],
-            fontName="Helvetica-Bold",
-            fontSize=16,
-            leading=20,
-            textColor=colors.HexColor("#0F0E0C"),
-        )
-        subtitle_style = ParagraphStyle(
-            "DocSubTitle",
-            parent=styles["Normal"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=12,
-            textColor=colors.HexColor("#5E5B54"),
-        )
-        heading_style = ParagraphStyle(
-            "DocHeading",
-            parent=styles["Normal"],
-            fontName="Helvetica-Bold",
-            fontSize=12,
-            leading=16,
-            textColor=colors.HexColor("#11682F"),
-            spaceBefore=14,
-            spaceAfter=6,
-        )
-        body_style = ParagraphStyle(
-            "DocBody",
-            parent=styles["Normal"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=13,
-            textColor=colors.HexColor("#2C2A26"),
-        )
-        caveat_style = ParagraphStyle(
-            "DocCaveat",
-            parent=styles["Normal"],
-            fontName="Helvetica-Oblique",
-            fontSize=8,
-            leading=11,
-            textColor=colors.HexColor("#5E5B54"),
-        )
-        table_cell_style = ParagraphStyle(
-            "TableCell",
-            parent=styles["Normal"],
-            fontName="Helvetica",
-            fontSize=8,
-            leading=10,
-            textColor=colors.HexColor("#1A1916"),
-        )
-        table_hdr_style = ParagraphStyle(
-            "TableHdr",
-            parent=styles["Normal"],
-            fontName="Helvetica-Bold",
-            fontSize=8,
-            leading=10,
-            textColor=colors.white,
-        )
+        # Build institutional grade PDF using fpdf (fully self-contained, no external runtime dependencies)
+        import fpdf
+        class ConservationPDF(fpdf.FPDF):
+            def header(self):
+                self.set_font('Helvetica', 'B', 8)
+                self.set_text_color(17, 104, 47) # Conservation forest green
+                self.cell(0, 5, 'NATIONAL WILDLIFE CONSERVATION INTELLIGENCE PLATFORM (NWCIP)', 0, 1, 'L')
+                self.set_draw_color(17, 104, 47)
+                self.set_line_width(0.4)
+                self.line(10, 15, 200, 15)
+                self.ln(4)
 
-        story = []
+            def footer(self):
+                self.set_y(-15)
+                self.set_font('Helvetica', 'I', 8)
+                self.set_text_color(120, 120, 120)
+                self.cell(0, 10, f'Official Conservation Record - Page {self.page_no()}', 0, 0, 'C')
 
-        # ── Header Banner
-        story.append(Paragraph("WILDLIFE CONSERVATION INTELLIGENCE PLATFORM", subtitle_style))
-        story.append(Paragraph(data["title"], title_style))
-        story.append(Spacer(1, 4))
-        story.append(Paragraph(f"Generated at: {data['generated_at']} | Scope: Official & Verified Multi-Source Telemetry", subtitle_style))
-        story.append(Spacer(1, 8))
-        story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#11682F"), spaceBefore=2, spaceAfter=10))
+        pdf = ConservationPDF(orientation='P', unit='mm', format='A4')
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
 
-        # ── Executive Summary Metrics Table
-        story.append(Paragraph("1. Executive Summary & Key Indicators", heading_style))
+        # Document Title
+        pdf.set_font('Helvetica', 'B', 16)
+        pdf.set_text_color(15, 14, 12)
+        safe_title = data['title'].encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(0, 10, safe_title, ln=True)
+
+        # Meta line
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(94, 91, 84)
+        pdf.cell(0, 6, f"Generated: {data['generated_at']} | Scope: Official Wildlife Database", ln=True)
+        pdf.ln(4)
+
+        # Executive Summary Section
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.set_text_color(17, 104, 47)
+        pdf.cell(0, 8, '1. Executive Summary & Key Indicators', ln=True)
+        pdf.ln(1)
+
+        pdf.set_fill_color(248, 247, 244)
+        pdf.set_text_color(30, 30, 30)
         summary_items = list(data.get("summary", {}).items())
-        # Format as 2-column key-value grid
-        summary_data = []
-        for i in range(0, len(summary_items), 2):
-            k1, v1 = summary_items[i]
-            k2, v2 = summary_items[i + 1] if i + 1 < len(summary_items) else ("", "")
-            summary_data.append([
-                Paragraph(f"<b>{k1}:</b>", body_style),
-                Paragraph(str(v1), body_style),
-                Paragraph(f"<b>{k2}:</b>" if k2 else "", body_style),
-                Paragraph(str(v2) if v2 else "", body_style),
-            ])
+        for k, v in summary_items:
+            pdf.set_font('Helvetica', 'B', 9)
+            safe_k = str(k).encode('latin-1', 'replace').decode('latin-1')
+            safe_v = str(v).encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(70, 7, f"  {safe_k}:", border=1, fill=True)
+            pdf.set_font('Helvetica', '', 9)
+            pdf.cell(120, 7, f"  {safe_v}", border=1, fill=True, ln=True)
+        pdf.ln(4)
 
-        if summary_data:
-            summary_table = Table(summary_data, colWidths=[120, 140, 120, 140])
-            summary_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F9F8F5")),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDD8CF")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#EFECE6")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]))
-            story.append(summary_table)
+        # Records Table Section
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.set_text_color(17, 104, 47)
+        pdf.cell(0, 8, '2. Selected Registry Occurrence Records', ln=True)
+        pdf.ln(1)
 
-        story.append(Spacer(1, 12))
-
-        # ── Tabular Sample Data
-        story.append(Paragraph("2. Selected Registry Occurrence Records", heading_style))
         headers = data.get("table_headers", [])
-        rows = data.get("table_rows", [])[:40]  # Limit to 40 items in PDF preview to keep presentation tidy
+        rows = data.get("table_rows", [])[:40]
 
-        pdf_table_data = [[Paragraph(h, table_hdr_style) for h in headers]]
-        for r in rows:
-            pdf_table_data.append([Paragraph(str(c), table_cell_style) for c in r])
+        if headers:
+            col_w = int(190 / len(headers))
+            pdf.set_fill_color(17, 104, 47)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 8)
+            for h in headers:
+                safe_h = str(h).encode('latin-1', 'replace').decode('latin-1')
+                pdf.cell(col_w, 7, safe_h, border=1, fill=True)
+            pdf.ln()
 
-        if headers and rows:
-            # Dynamic column widths
-            col_w = int(520 / len(headers))
-            col_widths = [col_w] * len(headers)
-            col_widths[1] = col_w + 30  # Give more width to Name/Species column
-            col_widths[0] = col_w - 30
+            pdf.set_text_color(30, 30, 30)
+            pdf.set_font('Helvetica', '', 8)
+            for r_idx, row in enumerate(rows):
+                fill = (r_idx % 2 == 1)
+                pdf.set_fill_color(245, 241, 234) if fill else pdf.set_fill_color(255, 255, 255)
+                for c_val in row:
+                    safe_c = str(c_val).encode('latin-1', 'replace').decode('latin-1')[:30]
+                    pdf.cell(col_w, 6, safe_c, border=1, fill=fill)
+                pdf.ln()
 
-            pdf_table = Table(pdf_table_data, colWidths=col_widths, repeatRows=1)
-            pdf_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#11682F")),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E0D8")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F1EA")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]))
-            story.append(pdf_table)
-            if len(data.get("table_rows", [])) > 40:
-                story.append(Spacer(1, 4))
-                story.append(Paragraph(f"<i>Displaying first 40 records of {len(data['table_rows'])} in PDF format. For the full dataset, export in CSV or XLSX format.</i>", caveat_style))
+        pdf.ln(4)
 
-        story.append(Spacer(1, 14))
+        # Caveats Section
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(17, 104, 47)
+        pdf.cell(0, 8, '3. Scientific Limitations & Data Governance', ln=True)
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_text_color(94, 91, 84)
+        for cav in data.get("limitations", []):
+            safe_cav = cav.encode('latin-1', 'replace').decode('latin-1')
+            pdf.multi_cell(0, 5, f"- {safe_cav}")
 
-        # ── Caveats & Governance
-        story.append(KeepTogether([
-            Paragraph("3. Scientific Limitations & Data Governance", heading_style),
-            HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#DDD8CF"), spaceBefore=2, spaceAfter=6),
-            *[Paragraph(f"• {c}", caveat_style) for c in data.get("limitations", [])]
-        ]))
-
-        doc.build(story)
+        pdf_bytes = pdf.output(dest='S').encode('latin1')
         filename = f"{report_type.value.lower()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        return buf.getvalue(), filename
+        return pdf_bytes, filename

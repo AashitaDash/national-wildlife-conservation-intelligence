@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, distinct
 from backend.app.dependencies import get_db
 from backend.app.database import engine
 from backend.app.models.species import Species
@@ -32,10 +32,9 @@ def get_system_stats(db: Session = Depends(get_db)):
     total_th_mentions = db.query(DocumentThreat).count()
     active_anom = db.query(MLAnomaly).filter(MLAnomaly.is_anomaly == True).count()
     crit_species = (
-        db.query(MLRiskScore)
+        db.query(func.count(distinct(MLRiskScore.species_id)))
         .filter(MLRiskScore.risk_level.in_(["CRITICAL", "HIGH"]))
-        .distinct(MLRiskScore.species_id)
-        .count()
+        .scalar() or 0
     )
 
     db_backend = "PostgreSQL + PostGIS" if "postgresql" in str(engine.url) else "SQLite Fallback (Academic/Dev)"
@@ -127,31 +126,61 @@ def get_threats_summary(db: Session = Depends(get_db)):
 def get_species_risk_ranking(db: Session = Depends(get_db)):
     """
     Species catalog prioritized by recent ML composite risk scores and threat status.
-    Single-pass SQL aggregation for sub-second performance across large catalogs.
+    Cross-database compatible SQL aggregation (PostgreSQL & SQLite).
     """
     from sqlalchemy import text
-    sql = text("""
-        SELECT 
-            s.id AS species_id, 
-            s.common_name, 
-            s.scientific_name, 
-            s.iucn_category, 
-            COALESCE(rs.risk_level, 'MEDIUM') AS risk_level, 
-            COALESCE(rs.composite_score, 50.0) AS composite_score, 
-            COALESCE(o.cnt, 0) AS observation_count 
-        FROM species s 
-        LEFT JOIN (
-            SELECT DISTINCT ON (species_id) species_id, risk_level, composite_score 
-            FROM ml_risk_scores 
-            ORDER BY species_id, calculated_at DESC
-        ) rs ON s.id = rs.species_id 
-        LEFT JOIN (
-            SELECT species_id, COUNT(*) AS cnt 
-            FROM observations 
-            GROUP BY species_id
-        ) o ON s.id = o.species_id 
-        ORDER BY composite_score DESC;
-    """)
+    from backend.app.database import IS_POSTGRES
+
+    if IS_POSTGRES:
+        sql = text("""
+            SELECT
+                s.id AS species_id,
+                s.common_name,
+                s.scientific_name,
+                s.iucn_category,
+                COALESCE(rs.risk_level, 'MEDIUM') AS risk_level,
+                COALESCE(rs.composite_score, 50.0) AS composite_score,
+                COALESCE(o.cnt, 0) AS observation_count
+            FROM species s
+            LEFT JOIN (
+                SELECT DISTINCT ON (species_id) species_id, risk_level, composite_score
+                FROM ml_risk_scores
+                ORDER BY species_id, calculated_at DESC
+            ) rs ON s.id = rs.species_id
+            LEFT JOIN (
+                SELECT species_id, COUNT(*) AS cnt
+                FROM observations
+                GROUP BY species_id
+            ) o ON s.id = o.species_id
+            ORDER BY composite_score DESC;
+        """)
+    else:
+        sql = text("""
+            SELECT
+                s.id AS species_id,
+                s.common_name,
+                s.scientific_name,
+                s.iucn_category,
+                COALESCE(rs.risk_level, 'MEDIUM') AS risk_level,
+                COALESCE(rs.composite_score, 50.0) AS composite_score,
+                COALESCE(o.cnt, 0) AS observation_count
+            FROM species s
+            LEFT JOIN (
+                SELECT m1.species_id, m1.risk_level, m1.composite_score
+                FROM ml_risk_scores m1
+                INNER JOIN (
+                    SELECT species_id, MAX(calculated_at) as max_calc
+                    FROM ml_risk_scores
+                    GROUP BY species_id
+                ) m2 ON m1.species_id = m2.species_id AND m1.calculated_at = m2.max_calc
+            ) rs ON s.id = rs.species_id
+            LEFT JOIN (
+                SELECT species_id, COUNT(*) AS cnt
+                FROM observations
+                GROUP BY species_id
+            ) o ON s.id = o.species_id
+            ORDER BY composite_score DESC;
+        """)
     rows = db.execute(sql).fetchall()
     return [
         SpeciesRiskSummary(

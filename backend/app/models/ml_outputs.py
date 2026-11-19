@@ -50,8 +50,16 @@ class MLAnomaly(Base):
 
     detected_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
 
+    # Operational lifecycle and workflow persistence
+    status = Column(String(50), default="OPEN", index=True)  # OPEN, ACKNOWLEDGED, UNDER_INVESTIGATION, RESOLVED
+    acknowledged = Column(Boolean, default=False, index=True)
+    acknowledged_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    investigation_notes = Column(Text, nullable=True)
+
     species = relationship("Species", back_populates="anomalies")
     location = relationship("Location", back_populates="anomalies")
+    acknowledged_by = relationship("User", foreign_keys=[acknowledged_by_id])
 
     def __repr__(self):
-        return f"<MLAnomaly(id={self.id}, species_id={self.species_id}, type='{self.anomaly_type}', score={self.anomaly_score:.3f})>"
+        return f"<MLAnomaly(id={self.id}, species_id={self.species_id}, type='{self.anomaly_type}', score={self.anomaly_score:.3f}, status='{self.status}')>"

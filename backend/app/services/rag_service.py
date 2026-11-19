@@ -13,6 +13,7 @@ from backend.app.models.observation import Observation
 from backend.app.models.document import Document
 from backend.app.models.threat import Threat
 from backend.app.models.ml_outputs import MLRiskScore, MLAnomaly
+from backend.app.models.global_intelligence import GlobalIntelligenceRecord
 from backend.app.schemas.chat import ChatSourceItem, ChatRetrievalMetadata, ChatResponse, ChatMessage
 from nlp.embeddings import VectorEmbedder
 
@@ -88,7 +89,7 @@ class RAGRetrievalEngine:
             sp_q = db.query(Species)
             if cls_filter:
                 sp_q = sp_q.filter(Species.class_name == cls_filter)
-            
+
             all_target = sp_q.all()
             sp_obs_counts = dict(
                 db.query(Observation.species_id, func.count(Observation.id))
@@ -111,7 +112,7 @@ class RAGRetrievalEngine:
         # Build evidence items for matched species
         for sp in matched_species[:limit]:
             obs_count = db.query(func.count(Observation.id)).filter(Observation.species_id == sp.id).scalar() or 0
-            
+
             # Check for ML risk score
             risk_entry = db.query(MLRiskScore).filter(MLRiskScore.species_id == sp.id).order_by(desc(MLRiskScore.calculated_at)).first()
             risk_info = f", Platform ML Risk Score: {risk_entry.composite_score:.2f} ({risk_entry.risk_level})" if risk_entry else ""
@@ -228,28 +229,75 @@ class RAGRetrievalEngine:
 
         return sources
 
+    @classmethod
+    def retrieve_global_intelligence_evidence(cls, db: Session, question: str, limit: int = 4) -> List[ChatSourceItem]:
+        sources: List[ChatSourceItem] = []
+        clean_q = question.strip().lower()
+        if not clean_q:
+            return sources
+
+        words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_q) if w not in {"the", "and", "what", "which", "are", "have", "with", "for", "from"}]
+        gi_records = db.query(GlobalIntelligenceRecord).order_by(desc(GlobalIntelligenceRecord.id)).limit(100).all()
+
+        scored = []
+        for r in gi_records:
+            text = f"{r.title or ''} {r.summary or ''} {r.species_name or ''} {r.threat_category or ''} {r.geography or ''} {r.layer or ''}".lower()
+            hits = sum(1 for w in words if w in text)
+            lexical_score = hits / len(words) if words else 0.0
+            if clean_q in text:
+                lexical_score = max(lexical_score, 0.95)
+
+            if lexical_score >= 0.2:
+                scored.append((r, lexical_score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        for r, score in scored[:limit]:
+            pub_str = f" [Pub: {r.publication_date.strftime('%Y-%m-%d')}]" if r.publication_date else ""
+            src_name = r.source.source_name if r.source else "Global Intelligence Feed"
+            snippet = f"[{r.layer}] {r.title}. {r.summary or r.content_text[:280]}{pub_str}"
+
+            sources.append(ChatSourceItem(
+                id=f"G{len(sources)+1}",
+                source_type="GLOBAL_INTELLIGENCE",
+                title=f"{src_name}: {r.title}",
+                reference=r.canonical_url or f"/intelligence/records/{r.id}",
+                snippet=snippet,
+                relevance_score=round(float(score), 4),
+                metadata={
+                    "record_id": r.id,
+                    "layer": r.layer,
+                    "geography": r.geography,
+                    "source_name": src_name,
+                    "publication_date": r.publication_date.isoformat() if r.publication_date else None,
+                    "canonical_url": r.canonical_url
+                }
+            ))
+
+        return sources
 
     @classmethod
     def retrieve(cls, db: Session, question: str) -> Tuple[List[ChatSourceItem], ChatRetrievalMetadata]:
         start_t = time.time()
         intent = cls.detect_intent(question)
-        
+
         # 1. Fetch database evidence
         db_sources = cls.retrieve_database_evidence(db, question, limit=5)
-        
-        # 2. For purely structured queries (e.g. fewest observation counts, species risk ranks),
-        # skip expensive vector document search if sufficient direct database facts were retrieved.
+
+        # 2. Document evidence
         q_lower = question.lower()
         is_structured_count_query = any(w in q_lower for w in ["fewest", "least", "most", "sparse", "rare", "how many observations", "observation records", "observation count"])
-        
+
         if is_structured_count_query and len(db_sources) > 0:
             doc_sources = []
+            gi_sources = []
         else:
             doc_sources = cls.retrieve_document_evidence(db, question, limit=4)
+            gi_sources = cls.retrieve_global_intelligence_evidence(db, question, limit=3)
 
         # Merge and re-index S1, S2...
         all_sources: List[ChatSourceItem] = []
-        for s in db_sources + doc_sources:
+        for s in db_sources + doc_sources + gi_sources:
             s.id = f"S{len(all_sources)+1}"
             all_sources.append(s)
 
@@ -260,7 +308,7 @@ class RAGRetrievalEngine:
             db_species_retrieved=len(db_sources),
             db_observations_retrieved=sum(s.metadata.get("observation_count", 0) for s in db_sources),
             documents_retrieved=len(doc_sources),
-            external_records_retrieved=0,
+            external_records_retrieved=len(gi_sources),
             llm_provider=settings.CHAT_LLM_PROVIDER,
             llm_model=settings.CHAT_LLM_MODEL,
             retrieval_time_ms=round(elapsed, 2),
@@ -316,6 +364,7 @@ CORE GROUNDING RULES:
 
         db_sources = [s for s in sources if s.source_type == "DATABASE"]
         doc_sources = [s for s in sources if s.source_type == "DOCUMENT"]
+        gi_sources = [s for s in sources if s.source_type == "GLOBAL_INTELLIGENCE"]
 
         if db_sources:
             lines.append("**Verified Database Records:**")
@@ -335,8 +384,14 @@ CORE GROUNDING RULES:
                 lines.append(f"- **{s.title}** [{s.id}]: \"{safe_snippet}\"")
             lines.append("")
 
+        if gi_sources:
+            lines.append("**Global Conservation Intelligence Feeds:**")
+            for s in gi_sources:
+                lines.append(f"- **{s.title}** [{s.id}]: {s.snippet}")
+            lines.append("")
+
         lines.append(
-            "_Note: Citations [S1, S2, ...] refer to verified platform database entries and ingested research documents listed below._"
+            "_Note: Citations [S1, S2, ...] refer to verified database entries, research documents, and global intelligence feeds._"
         )
         return "\n".join(lines)
 
@@ -345,7 +400,7 @@ CORE GROUNDING RULES:
         base_url = settings.OLLAMA_BASE_URL.rstrip("/")
         model = settings.CHAT_LLM_MODEL
         prompt = f"{cls.SYSTEM_PROMPT}\n\n{context}\n\nUser Question: {question}\n\nAnswer:"
-        
+
         try:
             # Short connect timeout (1.5s) to avoid delaying fallback if Ollama daemon is offline
             r = requests.post(

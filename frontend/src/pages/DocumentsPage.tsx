@@ -477,6 +477,8 @@ export const DocumentsPage: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const validatePdf = (f: File): string | null => {
     if (!f.name.toLowerCase().endsWith('.pdf')) return 'Only PDF documents are supported.';
     if (f.size === 0) return 'The selected file is empty.';
@@ -497,19 +499,54 @@ export const DocumentsPage: React.FC = () => {
     setPdfFile(null); setPdfTitle(''); setPdfError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const handleCancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+    setProcessingStep(0);
+    setError('Analysis cancelled by user.');
+  };
+
   const handleAnalyzeText = async () => {
-    if (!textInput.trim()) return;
+    if (!textInput.trim()) {
+      setError('Please enter document text to analyze.');
+      return;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true); setError(null); setNlpResult(null); setProcessingStep(0);
     try {
-      const res = await nlpService.analyzeText(textInput, docTitle);
+      const res = await nlpService.analyzeText(textInput, docTitle, controller.signal);
       setNlpResult(res); setShowAllThreats(false);
-    } catch (err) {
-      console.error('NLP Analysis failed:', err);
-      setError('NLP pipeline request failed. Check network or parameters and try again.');
-    } finally { setLoading(false); }
+    } catch (err: any) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+        setError('Analysis cancelled.');
+      } else {
+        console.error('NLP Analysis failed:', err);
+        const detail = err?.response?.data?.detail || err?.message || 'NLP pipeline request failed. Check network or parameters and try again.';
+        setError(detail);
+      }
+    } finally {
+      abortControllerRef.current = null;
+      setLoading(false);
+    }
   };
+
   const handleAnalyzePdf = async () => {
     if (!pdfFile) { setPdfError('Please select a PDF file before analysing.'); return; }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true); setError(null); setNlpResult(null); setPdfError(null); setShowAllThreats(false);
     let stepIdx = 0;
     const stepTimer = setInterval(() => {
@@ -517,12 +554,21 @@ export const DocumentsPage: React.FC = () => {
       setProcessingStep(stepIdx);
     }, 900);
     try {
-      const res = await nlpService.analyzePdf(pdfFile, pdfTitle || undefined);
+      const res = await nlpService.analyzePdf(pdfFile, pdfTitle || undefined, controller.signal);
       setNlpResult(res);
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      setError(detail || 'NLP processing failed. Please try again.');
-    } finally { clearInterval(stepTimer); setProcessingStep(0); setLoading(false); }
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+        setError('PDF analysis cancelled.');
+      } else {
+        const detail = err?.response?.data?.detail || err?.message;
+        setError(detail || 'NLP processing failed. Please try again.');
+      }
+    } finally {
+      clearInterval(stepTimer);
+      abortControllerRef.current = null;
+      setProcessingStep(0);
+      setLoading(false);
+    }
   };
 
   const tabs: { id: MainTab; label: string; icon: React.ReactNode }[] = [
@@ -587,11 +633,19 @@ export const DocumentsPage: React.FC = () => {
                   <textarea id="doc-text-input" rows={6} value={textInput} onChange={e => setTextInput(e.target.value)}
                     className="w-full p-3 bg-[#fdfaf5] border border-[#e5e0d8] rounded-sm text-sm text-[#1a1916] focus:outline-none focus:border-emerald-700 font-sans leading-relaxed" />
                 </div>
-                <button id="btn-run-text-analysis" onClick={handleAnalyzeText} disabled={loading}
-                  className="w-full py-2.5 bg-[#1a1916] hover:bg-[#2c2b26] disabled:opacity-50 text-white font-mono tracking-wide text-xs rounded-sm flex items-center justify-center gap-2 transition-all">
-                  <Sparkles className="w-4 h-4" />
-                  <span>{loading ? 'PROCESSING NLP EMBEDDINGS...' : 'RUN PIPELINE ANALYSIS'}</span>
-                </button>
+                <div className="flex gap-2">
+                  <button id="btn-run-text-analysis" onClick={handleAnalyzeText} disabled={loading}
+                    className="flex-1 py-2.5 bg-[#1a1916] hover:bg-[#2c2b26] disabled:opacity-50 text-white font-mono tracking-wide text-xs rounded-sm flex items-center justify-center gap-2 transition-all">
+                    <Sparkles className="w-4 h-4" />
+                    <span>{loading ? 'PROCESSING NLP EMBEDDINGS...' : 'RUN PIPELINE ANALYSIS'}</span>
+                  </button>
+                  {loading && (
+                    <button id="btn-cancel-text-analysis" onClick={handleCancelAnalysis}
+                      className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-mono text-xs rounded-sm transition-colors">
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
             {activeTab === 'pdf' && (
@@ -637,11 +691,19 @@ export const DocumentsPage: React.FC = () => {
                     <AlertCircle className="w-4 h-4 shrink-0" />{pdfError}
                   </div>
                 )}
-                <button id="btn-analyze-pdf" onClick={handleAnalyzePdf} disabled={loading || !pdfFile}
-                  className="w-full py-2.5 bg-[#1a1916] hover:bg-[#2c2b26] disabled:opacity-40 text-white font-mono tracking-wide text-xs rounded-sm flex items-center justify-center gap-2 transition-all">
-                  <Sparkles className="w-4 h-4" />
-                  <span>{loading ? 'PROCESSING PDF...' : 'ANALYSE PDF'}</span>
-                </button>
+                <div className="flex gap-2">
+                  <button id="btn-analyze-pdf" onClick={handleAnalyzePdf} disabled={loading || !pdfFile}
+                    className="flex-1 py-2.5 bg-[#1a1916] hover:bg-[#2c2b26] disabled:opacity-40 text-white font-mono tracking-wide text-xs rounded-sm flex items-center justify-center gap-2 transition-all">
+                    <Sparkles className="w-4 h-4" />
+                    <span>{loading ? 'PROCESSING PDF...' : 'ANALYSE PDF'}</span>
+                  </button>
+                  {loading && (
+                    <button id="btn-cancel-pdf-analysis" onClick={handleCancelAnalysis}
+                      className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-mono text-xs rounded-sm transition-colors">
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -665,6 +727,15 @@ export const DocumentsPage: React.FC = () => {
                   </div>
                 ) : (
                   <>
+                    <div className="flex items-center justify-between pb-2 border-b border-[#e5e0d8]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                        <span className="text-xs font-semibold text-[#1a1916]">Extracting entities &amp; generating embeddings...</span>
+                      </div>
+                      <button onClick={handleCancelAnalysis} className="text-[10px] font-mono text-rose-600 hover:text-rose-700 underline">
+                        Cancel
+                      </button>
+                    </div>
                     <div className="animate-skeleton h-4 w-2/3 bg-[#e5e0d8] rounded-sm" />
                     <div className="animate-skeleton h-3 w-full bg-[#e5e0d8] rounded-sm" />
                     <div className="animate-skeleton h-3 w-5/6 bg-[#e5e0d8] rounded-sm" />
@@ -719,20 +790,64 @@ export const DocumentsPage: React.FC = () => {
                         )) : <span className="text-[#94918a]">None detected</span>}
                       </div>
                     </div>
+                    {nlpResult.entities.people && nlpResult.entities.people.length > 0 && (
+                      <div className="bg-[#fdfaf5] p-2.5 rounded-sm border border-[#e5e0d8] sm:col-span-2">
+                        <span className="text-[10px] text-blue-700 flex items-center gap-1 font-mono mb-1.5 font-semibold"><Building2 className="w-3 h-3" /> AUTHORS / PERSONNEL</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {nlpResult.entities.people.map((p, i) => (
+                            <EntityChip key={i} label={entityLabel(p)} colorClass="bg-blue-50 text-blue-700 border-blue-200" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* Document Type Badge & Context */}
+                {nlpResult.document_type && (
+                  <div className="bg-[#fdfaf5] border border-[#e5e0d8] px-3.5 py-2.5 rounded-sm flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-[#94918a] uppercase tracking-wider">Document Classification</span>
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-sm bg-[#1a1916] text-white">
+                      {nlpResult.document_type.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                )}
+
                 {nlpResult.threats.length > 0 && (
                   <div className="bg-white border border-[#e5e0d8] p-4 rounded-sm space-y-2.5">
                     <h4 className="text-[10px] font-mono font-bold text-[#94918a] uppercase flex items-center gap-1.5 tracking-wider">
                       <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> Classified Threats ({nlpResult.threats.length})
                     </h4>
                     {(showAllThreats ? nlpResult.threats : nlpResult.threats.slice(0, 3)).map((th, i) => (
-                      <div key={i} className="bg-[#fdfaf5] p-2.5 rounded-sm border border-[#e5e0d8] flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-xs font-semibold text-[#1a1916] block">{th.threat_name}</span>
-                          <span className="text-[10px] text-rose-600 font-mono font-semibold">{th.threat_code}</span>
+                      <div key={i} className="bg-[#fdfaf5] p-2.5 rounded-sm border border-[#e5e0d8] space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-[#1a1916]">{th.threat_name}</span>
+                            {th.evidence_status && (
+                              <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded-sm ${
+                                th.evidence_status === 'DIRECTLY_OBSERVED' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                                th.evidence_status === 'PROPOSED_OR_CAPABILITY' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
+                                th.evidence_status === 'CITED_LITERATURE' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                                'bg-amber-100 text-amber-800 border border-amber-300'
+                              }`}>
+                                {th.evidence_status.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono text-[#94918a] shrink-0">
+                            {(th.confidence * 100).toFixed(0)}% calibrated
+                          </span>
                         </div>
-                        <span className="text-[10px] font-mono text-[#94918a]">{(th.confidence * 100).toFixed(0)}% confidence</span>
+                        {th.supporting_passage && (
+                          <p className="text-[11px] text-[#77746c] italic bg-white p-2 rounded-sm border border-[#e5e0d8] line-clamp-2">
+                            "{th.supporting_passage}"
+                          </p>
+                        )}
+                        {th.explanation && (
+                          <p className="text-[10px] font-mono text-[#94918a]">
+                            {th.explanation}
+                          </p>
+                        )}
                       </div>
                     ))}
                     {nlpResult.threats.length > 3 && (

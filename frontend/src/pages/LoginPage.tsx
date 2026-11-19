@@ -12,9 +12,10 @@ const CAPABILITIES = [
 ];
 
 const DEMO_USERS: { username: string; role: RoleName; label: string; password: string }[] = [
-  { username: 'researcher@wildlife.com', role: 'RESEARCHER',    label: 'RESEARCHER', password: 'Researcher@123' },
-  { username: 'officer@forest.gov.in',    role: 'FOREST_OFFICER', label: 'OFFICER',    password: 'Officer@123' },
-  { username: 'admin@wildlife.gov.in',   role: 'ADMIN',         label: 'ADMIN',      password: 'Admin@123' },
+  { username: 'citizen@gmail.com',         role: 'CITIZEN',        label: 'PUBLIC',     password: 'Citizen@123' },
+  { username: 'researcher@wildlife.gov.in', role: 'RESEARCHER',    label: 'RESEARCHER', password: 'Researcher@123' },
+  { username: 'officer@forest.gov.in',     role: 'FOREST_OFFICER', label: 'OFFICER',    password: 'Officer@123' },
+  { username: 'admin@wildlife.gov.in',     role: 'ADMIN',          label: 'ADMIN',      password: 'Admin@123' },
 ];
 
 export const LoginPage: React.FC = () => {
@@ -32,8 +33,17 @@ export const LoginPage: React.FC = () => {
     setError(null);
     setSubmitting(true);
     try {
-      await login(username, password);
-      navigate('/');
+      const loggedInUser = await login(username, password);
+      const roles = loggedInUser.roles?.map(r => r.name) || [];
+      if (roles.includes('ADMIN')) {
+        navigate('/admin');
+      } else if (roles.includes('FOREST_OFFICER')) {
+        navigate('/officer');
+      } else if (roles.includes('RESEARCHER')) {
+        navigate('/researcher');
+      } else {
+        navigate('/');
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Authentication failed. Check credentials.');
     } finally {
@@ -57,14 +67,14 @@ export const LoginPage: React.FC = () => {
         {/* Cinematic Wildlife Background */}
         <div
           className="absolute inset-0 w-full h-full bg-cover bg-center"
-          style={{ 
+          style={{
             backgroundImage: 'url(/login-bg.jpg)',
             backgroundPosition: 'center 40%',
             opacity: 0.6
           }}
         />
         {/* Gradient overlay to ensure text readability */}
-        <div 
+        <div
           className="absolute inset-0 w-full h-full"
           style={{
             background: 'linear-gradient(180deg, rgba(15,14,12,0.3) 0%, rgba(15,14,12,0.9) 100%)'

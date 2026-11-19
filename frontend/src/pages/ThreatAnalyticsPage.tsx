@@ -83,7 +83,7 @@ export const ThreatAnalyticsPage: React.FC = () => {
             Threat Analytics
           </h1>
           <p className="text-sm mt-1" style={{ color: '#77746c' }}>
-            Random Forest risk classification & Isolation Forest telemetry anomaly detection.
+            Random Forest vulnerability classification & Isolation Forest observation/spatial anomaly detection.
           </p>
         </div>
 

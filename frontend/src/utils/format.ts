@@ -3,7 +3,7 @@ import { NLPEntity, Observation } from '../types';
 /** Human-readable label for an NLP entity (real API returns objects; older shape was a string). */
 export const entityLabel = (e: NLPEntity): string => {
   if (typeof e === 'string') return e;
-  return e.matched_name || e.name || e.value || e.scientific_name || '';
+  return (e as any).canonical_name || e.name || e.matched_name || e.value || e.scientific_name || 'Unknown';
 };
 
 /** Observation date: real field is `observed_at`; `observation_date` is the legacy name. */

@@ -82,3 +82,37 @@ class TextPreprocessor:
         if remove_stopwords:
             tokens = [tok for tok in tokens if tok.lower() not in cls.STOPWORDS]
         return tokens
+
+    @staticmethod
+    def segment_sections(text: str) -> List[dict]:
+        """
+        Splits text into logical document sections (Abstract, Intro, Body, Conclusion).
+        Returns a list of dicts with section name and text.
+        """
+        if not text:
+            return [{"section": "BODY", "text": ""}]
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if not paragraphs:
+            paragraphs = [text.strip()]
+        sections = []
+        for idx, p in enumerate(paragraphs):
+            sec_type = "BODY"
+            if idx == 0 and len(paragraphs) > 1:
+                sec_type = "ABSTRACT" if "abstract" in p.lower() else "INTRODUCTION"
+            sections.append({"section": sec_type, "text": p})
+        return sections
+
+    @staticmethod
+    def classify_document_type(text: str, title: str = "") -> str:
+        """
+        Categorizes document as INCIDENT_LOG, FIELD_REPORT, RESEARCH_PAPER, or GENERAL_CONSERVATION_DOC.
+        """
+        combined = f"{title} {text}".lower()
+        if any(w in combined for w in ["incident", "poaching", "corridor", "encounter", "arrest", "seizure", "fir"]):
+            return "INCIDENT_LOG"
+        elif any(w in combined for w in ["field report", "survey", "census", "monitoring", "sighting"]):
+            return "FIELD_REPORT"
+        elif any(w in combined for w in ["abstract", "methodology", "study", "analysis", "journal", "published"]):
+            return "RESEARCH_PAPER"
+        return "GENERAL_CONSERVATION_DOC"
+

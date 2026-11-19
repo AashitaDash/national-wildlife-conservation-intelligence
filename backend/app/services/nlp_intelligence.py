@@ -607,14 +607,13 @@ class ConservationQAService:
                 }
             )
 
-        search_results = SearchService.hybrid_search(
+        # Retrieve top document candidates directly via dedicated search_documents
+        all_doc_results = SearchService.search_documents(
             db=db,
             query=clean_q,
             hybrid_alpha=0.5,
-            limit=max(top_k * 2, 20),
+            limit=max(top_k * 4, 30),
         )
-
-        all_doc_results = [r for r in search_results if r.entity_type == "DOCUMENT"]
         filtered_doc_results = [
             r for r in all_doc_results
             if r.relevance_score >= cls.MIN_RELEVANCE_THRESHOLD

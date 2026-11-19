@@ -12,9 +12,18 @@ export interface User {
   email: string;
   full_name?: string;
   is_active: boolean;
+  approval_status?: 'APPROVED' | 'PENDING' | 'REJECTED';
   roles: Role[];
   created_at?: string;
   last_active_at?: string;
+}
+
+export interface UsernameAvailabilityResult {
+  username: string;
+  available: boolean;
+  valid: boolean;
+  message: string;
+  suggestions: string[];
 }
 
 // ── Submission workflow types ─────────────────────────────────────────────────
@@ -139,11 +148,17 @@ export interface Notification {
 export interface AdminUser {
   id: number;
   email: string;
+  username?: string;
   full_name: string;
   organization?: string;
   is_active: boolean;
   is_suspended: boolean;
   role_name: string;
+  approval_status?: 'APPROVED' | 'PENDING' | 'REJECTED';
+  approved_by_id?: number;
+  approved_at?: string;
+  role_assigned_by_id?: number;
+  role_assigned_at?: string;
   created_at?: string;
   last_active_at?: string;
   submission_count: number;
@@ -348,6 +363,7 @@ export type NLPEntity =
 
 export interface NLPAnalysisResult {
   title?: string;
+  document_type?: string;
   cleaned_text: string;
   sentence_count: number;
   entities: {
@@ -356,6 +372,7 @@ export interface NLPAnalysisResult {
     protected_areas: NLPEntity[];
     organizations: NLPEntity[];
     dates: NLPEntity[];
+    people?: NLPEntity[];
   };
   threats: Array<{
     threat_code: string;
@@ -363,11 +380,19 @@ export interface NLPAnalysisResult {
     confidence: number;
     severity_weight: number;
     matched_keywords: string[];
+    evidence_status?: string;
+    supporting_passage?: string;
+    section_type?: string;
+    score_type?: string;
+    explanation?: string;
   }>;
   topics: Array<{
     topic_code: string;
     topic_name: string;
     score: number;
+    score_type?: string;
+    raw_score?: number;
+    explanation?: string;
   }>;
   summary: string;
   embedding?: number[];
@@ -397,19 +422,29 @@ export interface AnomalyResult {
   is_anomaly?: boolean;
   anomaly_score?: number; // Legacy or explicit score
   isolation_score?: number; // Updated field
+  score_interpretation?: string;
+  operational_severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   anomaly_type?: string;
   explanation: string;
-  
+
   // Conservation Anomaly Intelligence fields
   species?: { id: number; common_name: string; scientific_name: string };
   location?: { id: number; name: string };
   period?: { days: number; label: string };
   observation_count?: number;
+  expected_baseline?: number;
+  deviation_percentage?: number;
   related_threats?: Array<{ category_name: string; mention_count: number }>;
   related_documents?: Array<{ id: number; title: string }>;
   supporting_record_count?: number;
+  hypotheses?: string[];
   investigation_guidance?: string;
   evidence_strength?: string;
+  fingerprint?: string;
+  status?: 'OPEN' | 'ACKNOWLEDGED' | 'UNDER_INVESTIGATION' | 'RESOLVED';
+  acknowledged?: boolean;
+  acknowledged_at?: string;
+  investigation_notes?: string;
 
   metrics?: Record<string, any>;
   disclaimer?: string;

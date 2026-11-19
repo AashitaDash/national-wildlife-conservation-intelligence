@@ -10,7 +10,14 @@ from backend.app.models.document import DocumentThreat
 from backend.app.models.threat import Threat
 from backend.app.models.ml_outputs import MLRiskScore, MLAnomaly
 from backend.app.models.alert import ConservationAlert
-from backend.app.schemas.ml import RiskAssessmentRequest, RiskAssessmentResponse, AnomalyItem, ModelMetricsResponse
+from backend.app.schemas.ml import (
+    RiskAssessmentRequest,
+    RiskAssessmentResponse,
+    AnomalyItem,
+    ModelMetricsResponse,
+    AcknowledgeAnomalyRequest
+)
+from backend.app.models.user import User
 
 from ml.feature_engineering import FeatureEngineeringService
 from ml.risk_classifier import RiskClassifierService
@@ -149,40 +156,70 @@ def assess_species_risk(
 @router.get("/anomalies", response_model=List[AnomalyItem])
 def list_active_anomalies(
     active_only: bool = True,
+    deduplicate: bool = True,
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
     """
     Retrieve active ecological anomalies detected by the Isolation Forest,
-    contextualized with Conservation Anomaly Intelligence.
+    contextualized with Actionable Conservation Anomaly Intelligence.
+    Answers: What changed? Against what baseline? Over what window?
+    Separates statistical anomaly score, operational severity, and evidence confidence.
     """
     from backend.app.models.document import DocumentSpecies, DocumentThreat, Document
     from sqlalchemy import func
+    import hashlib
 
     query = db.query(MLAnomaly)
     if active_only:
         query = query.filter(MLAnomaly.is_anomaly == True)
 
-    records = query.order_by(MLAnomaly.detected_at.desc()).offset(skip).limit(limit).all()
+    records = query.order_by(MLAnomaly.detected_at.desc()).offset(skip).limit(limit * 3 if deduplicate else limit).all()
     results = []
-    
-    thirty_days_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    seen_fingerprints = set()
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    t30 = now_utc - datetime.timedelta(days=30)
+    t90 = now_utc - datetime.timedelta(days=90)
 
     for r in records:
-        # Context 1: Observations
+        # Stable fingerprint: species_id + location_id + anomaly_type + detection month
+        month_str = r.detected_at.strftime("%Y-%m") if r.detected_at else "current"
+        fingerprint_raw = f"{r.species_id}:{r.location_id or 0}:{r.anomaly_type}:{month_str}"
+        fingerprint = hashlib.sha256(fingerprint_raw.encode("utf-8")).hexdigest()[:16]
+
+        if deduplicate and fingerprint in seen_fingerprints:
+            continue
+        seen_fingerprints.add(fingerprint)
+
+        # 1. Real observation count in recent 30-day window
         obs_count = db.query(Observation).filter(
             Observation.species_id == r.species_id,
-            Observation.observed_at >= thirty_days_ago
+            Observation.observed_at >= t30
         ).count()
 
-        # Context 2: Documents
+        # 2. Historical baseline: 90-day window normalized to 30 days
+        obs_90d = db.query(Observation).filter(
+            Observation.species_id == r.species_id,
+            Observation.observed_at >= t90
+        ).count()
+        expected_baseline = round(obs_90d / 3.0, 1)
+
+        # Calculate deviation percentage if baseline is meaningful
+        if expected_baseline > 0:
+            dev_pct = round(((obs_count - expected_baseline) / expected_baseline) * 100.0, 1)
+        else:
+            dev_pct = None
+
+        # 3. Contextual evidence: scientific documents
         docs = db.query(Document).join(DocumentSpecies).filter(
             DocumentSpecies.species_id == r.species_id
         ).limit(5).all()
         related_documents = [{"id": d.id, "title": d.title} for d in docs]
-        
-        # Context 3: Threats
+        doc_count = len(related_documents)
+
+        # 4. Contextual evidence: active threat mentions
         threat_query = db.query(Threat.category_name, func.count(DocumentThreat.document_id).label("mention_count")).\
             join(DocumentThreat, Threat.id == DocumentThreat.threat_id).\
             join(DocumentSpecies, DocumentThreat.document_id == DocumentSpecies.document_id).\
@@ -190,20 +227,63 @@ def list_active_anomalies(
             group_by(Threat.category_name).\
             order_by(func.count(DocumentThreat.document_id).desc()).\
             limit(3).all()
-            
         related_threats = [{"category_name": t[0], "mention_count": t[1]} for t in threat_query]
 
-        doc_count = len(related_documents)
-        if doc_count >= 5:
+        # 5. Evidence confidence (Volume and ground-truth supporting data)
+        if doc_count >= 3 and obs_count >= 10:
             evidence_strength = "HIGH"
-        elif doc_count >= 2:
+        elif doc_count >= 1 or obs_count >= 5:
             evidence_strength = "MEDIUM"
-        elif doc_count == 1:
+        elif obs_count > 0:
             evidence_strength = "LOW"
         else:
             evidence_strength = "INSUFFICIENT"
 
-        # Safe parsing
+        # 6. Score Interpretation (Isolation Forest decision function: lower / more negative = deeper outlier)
+        iso = r.anomaly_score
+        if iso < -0.15:
+            score_interp = f"Severe statistical outlier (score {iso:.3f} << 0 threshold; deep isolation tree branch depth)"
+        elif iso < -0.05:
+            score_interp = f"Moderate statistical outlier (score {iso:.3f} < 0 threshold; unusual multi-feature combination)"
+        elif iso < 0.0:
+            score_interp = f"Marginal outlier (score {iso:.3f} near boundary; potential boundary fluctuation)"
+        else:
+            score_interp = f"Nominal baseline zone (score {iso:.3f} >= 0; inlier distribution)"
+
+        # 7. Operational Severity (Separated from raw model score)
+        # Combines anomaly depth + presence of critical threats + magnitude of deviation
+        threat_names = [t["category_name"].lower() for t in related_threats]
+        has_severe_threat = any("poaching" in tn or "fragmentation" in tn or "snaring" in tn or "conflict" in tn for tn in threat_names)
+
+        if (iso < -0.12 and has_severe_threat) or (dev_pct is not None and dev_pct <= -65.0):
+            operational_severity = "CRITICAL"
+        elif iso < -0.05 or has_severe_threat:
+            operational_severity = "HIGH"
+        elif iso < 0.0:
+            operational_severity = "MEDIUM"
+        else:
+            operational_severity = "LOW"
+
+        # 8. Hypotheses: What might explain this? (Labeled explicitly as working hypotheses)
+        hypotheses = []
+        if dev_pct is not None and dev_pct < -40.0:
+            hypotheses.append("Hypothesis A: Local patrol or sensor coverage dropout during reporting period.")
+            hypotheses.append("Hypothesis B: Spatial displacement of herd/individuals away from human disturbance or linear infrastructure.")
+            hypotheses.append("Hypothesis C: Acute mortality or severe localized poaching/snaring pressure.")
+        elif dev_pct is not None and dev_pct > 50.0:
+            hypotheses.append("Hypothesis A: Seasonal congregation around remaining water bodies or food resources.")
+            hypotheses.append("Hypothesis B: Increased survey effort or targeted community reporting.")
+        else:
+            hypotheses.append("Hypothesis A: Uncorrelated environmental fluctuation within standard seasonal tolerance.")
+            hypotheses.append("Hypothesis B: Sporadic multi-jurisdictional migration between corridor segments.")
+
+        # 9. Investigation Guidance for Field Officers & Researchers
+        guidance = (
+            f"1. Cross-reference recent telemetry from {r.location.name if r.location else 'monitored sectors'} against patrol logs. "
+            f"2. Inspect high-frequency threat zones ({', '.join([t['category_name'] for t in related_threats[:2]]) or 'unclassified'}). "
+            f"3. Verify sensor uptime before confirming ecological disruption."
+        )
+
         species_dict = {
             "id": r.species_id,
             "common_name": r.species.common_name if r.species else "Unknown",
@@ -211,7 +291,7 @@ def list_active_anomalies(
         }
         location_dict = {
             "id": r.location_id,
-            "name": r.location.name if r.location else "Unknown Region"
+            "name": r.location.name if r.location else "Core Habitat Corridor"
         } if r.location_id else None
 
         results.append(
@@ -219,20 +299,83 @@ def list_active_anomalies(
                 id=r.id,
                 anomaly_type=r.anomaly_type,
                 isolation_score=r.anomaly_score,
+                score_interpretation=score_interp,
+                operational_severity=operational_severity,
                 species=species_dict,
                 location=location_dict,
-                period={"days": 30, "label": "Last 30 days"},
+                period={"days": 30, "label": "Last 30 days vs 90-day baseline"},
                 observation_count=obs_count,
+                expected_baseline=expected_baseline,
+                deviation_percentage=dev_pct,
                 related_threats=related_threats,
                 related_documents=related_documents,
                 supporting_record_count=obs_count + doc_count,
-                explanation=r.explanation or "An unusual observation pattern was detected.",
-                investigation_guidance="Review the associated observations, recent conservation documents, and field reports to determine whether the pattern represents a meaningful ecological or reporting change.",
+                explanation=r.explanation or "Unusual observation density flagged by isolation forest.",
+                hypotheses=hypotheses,
+                investigation_guidance=guidance,
                 evidence_strength=evidence_strength,
+                fingerprint=fingerprint,
+                status=r.status or ("ACKNOWLEDGED" if r.acknowledged else "OPEN"),
+                acknowledged=bool(r.acknowledged),
+                acknowledged_by_id=r.acknowledged_by_id,
+                acknowledged_at=r.acknowledged_at,
+                investigation_notes=r.investigation_notes,
                 detected_at=r.detected_at
             )
         )
+        if len(results) >= limit:
+            break
+
     return results
+
+
+@router.post("/anomalies/{anomaly_id}/acknowledge")
+def acknowledge_anomaly(
+    anomaly_id: int,
+    body: Optional[AcknowledgeAnomalyRequest] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["ADMIN", "FOREST_OFFICER", "RESEARCHER"]))
+):
+    """
+    Acknowledge an anomaly, persist the review status, recording user ID,
+    timestamp, and optional investigation notes. Restricted to authorized roles.
+    """
+    anom = db.query(MLAnomaly).filter(MLAnomaly.id == anomaly_id).first()
+    if not anom:
+        raise HTTPException(status_code=404, detail="Anomaly record not found")
+
+    target_status = (body.status if body and body.status else "ACKNOWLEDGED").upper()
+    valid_statuses = {"ACKNOWLEDGED", "UNDER_INVESTIGATION", "RESOLVED", "OPEN"}
+    if target_status not in valid_statuses:
+        target_status = "ACKNOWLEDGED"
+
+    try:
+        anom.status = target_status
+        anom.acknowledged = (target_status != "OPEN")
+        anom.acknowledged_by_id = current_user.id
+        anom.acknowledged_at = datetime.datetime.now(datetime.timezone.utc)
+        if body and body.notes:
+            anom.investigation_notes = body.notes.strip()
+
+        db.commit()
+        db.refresh(anom)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to persist anomaly acknowledgement: {str(exc)}"
+        )
+
+    return {
+        "status": "success",
+        "id": anom.id,
+        "investigation_status": anom.status,
+        "acknowledged": anom.acknowledged,
+        "acknowledged_by_id": anom.acknowledged_by_id,
+        "acknowledged_at": anom.acknowledged_at.isoformat() if anom.acknowledged_at else None,
+        "investigation_notes": anom.investigation_notes,
+        "message": f"Anomaly #{anom.id} status updated to {anom.status} by {current_user.email}"
+    }
 
 
 @router.get("/metrics")

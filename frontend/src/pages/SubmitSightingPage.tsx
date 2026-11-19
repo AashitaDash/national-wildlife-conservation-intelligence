@@ -140,7 +140,7 @@ export const SubmitSightingPage: React.FC = () => {
           <div className="text-xs font-mono font-bold tracking-widest text-[#11682f] uppercase">
             Data Collection
           </div>
-          <h1 className="text-2xl font-serif font-bold text-[#1f1e1a]">Log Wildlife Sighting</h1>
+          <h1 className="text-2xl font-serif font-bold text-[#1f1e1a]">Field Observation / Incident Report</h1>
         </div>
       </div>
 

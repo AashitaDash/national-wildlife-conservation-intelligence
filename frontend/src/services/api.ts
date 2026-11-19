@@ -14,19 +14,28 @@ import {
 
 const rawBase = (import.meta as any).env?.VITE_API_BASE_URL;
 const API_BASE = (() => {
-  if (!rawBase) return 'https://nwcip-backend.onrender.com/api/v1';
-  let base = rawBase.trim();
-  // If Render passed internal service name like "nwcip-backend" or "http://nwcip-backend"
-  base = base.replace(/^https?:\/\//, '');
-  if (!base.includes('.') && base.length > 0) {
-    base = `${base}.onrender.com`;
+  if (rawBase && rawBase.trim().length > 0) {
+    let base = rawBase.trim();
+    if (base.startsWith('/')) {
+      return base.replace(/\/+$/, '');
+    }
+    base = base.replace(/^https?:\/\//, '');
+    if (!base.includes('.') && !base.includes('localhost') && !base.includes('127.0.0.1') && base.length > 0) {
+      base = `${base}.onrender.com`;
+    }
+    const protocol = base.includes('localhost') || base.includes('127.0.0.1') ? 'http' : 'https';
+    base = `${protocol}://${base}`;
+    base = base.replace(/\/+$/, '');
+    if (!base.endsWith('/api/v1')) {
+      base = `${base}/api/v1`;
+    }
+    return base;
   }
-  base = `https://${base}`;
-  base = base.replace(/\/+$/, '');
-  if (!base.endsWith('/api/v1')) {
-    base = `${base}/api/v1`;
+  // If in development mode or running on localhost/127.0.0.1, use relative /api/v1 proxy or local backend
+  if ((import.meta as any).env?.DEV || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))) {
+    return '/api/v1';
   }
-  return base;
+  return 'https://nwcip-backend.onrender.com/api/v1';
 })();
 
 export const api = axios.create({
@@ -48,12 +57,25 @@ api.interceptors.request.use((config) => {
 
 // Auth Services
 export const authService = {
+  checkUsername: async (username: string): Promise<{
+    username: string;
+    available: boolean;
+    valid: boolean;
+    message: string;
+    suggestions: string[];
+  }> => {
+    const response = await api.get('/auth/check-username', {
+      params: { username }
+    });
+    return response.data;
+  },
+
   login: async (username: string, password: string): Promise<AuthResponse> => {
-    // Backend uses OAuth2PasswordRequestForm
+    // Backend uses OAuth2PasswordRequestForm (supports email or username)
     const params = new URLSearchParams();
     params.append('username', username);
     params.append('password', password);
-    
+
     const response = await api.post<any>('/auth/token', params, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -64,9 +86,10 @@ export const authService = {
       token_type: response.data.token_type,
       user: {
         id: response.data.user_id,
-        username: username,
-        email: username,
+        username: response.data.username || username,
+        email: response.data.email || username,
         full_name: response.data.full_name,
+        approval_status: response.data.approval_status || 'APPROVED',
         is_active: true,
         roles: [{ id: 1, name: response.data.role }]
       }
@@ -77,19 +100,95 @@ export const authService = {
     username: string;
     email: string;
     password: string;
-    full_name?: string;
+    full_name: string;
   }): Promise<AuthResponse> => {
     // Backend expects UserCreate schema and returns UserResponse
     const response = await api.post<any>('/auth/register', {
+      username: userData.username,
       email: userData.email,
       password: userData.password,
-      full_name: userData.full_name || userData.username,
+      full_name: userData.full_name,
     });
     // Return empty auth response to let the UI know it succeeded, then it can redirect to login
     return {
       access_token: '',
       token_type: '',
       user: response.data
+    };
+  },
+
+  // V32 Multi-Step Verification & Role Selection
+  initiateRegistration: async (userData: {
+    username: string;
+    email: string;
+    password: string;
+    full_name: string;
+  }): Promise<{
+    email: string;
+    message: string;
+    cooldown_seconds: number;
+    expires_in_minutes: number;
+    verification_token?: string;
+    otp_code?: string;
+  }> => {
+    const response = await api.post('/auth/register/initiate', {
+      username: userData.username,
+      email: userData.email,
+      password: userData.password,
+      full_name: userData.full_name,
+    });
+    return response.data;
+  },
+
+  verifyEmail: async (data: {
+    email: string;
+    otp_code?: string;
+    verification_token?: string;
+  }): Promise<{
+    email: string;
+    verified: boolean;
+    verified_token: string;
+    message: string;
+    available_roles: Array<{
+      id: string;
+      title: string;
+      target_role: string;
+      description: string;
+    }>;
+  }> => {
+    const response = await api.post('/auth/register/verify-email', data);
+    return response.data;
+  },
+
+  resendVerification: async (email: string): Promise<{
+    email: string;
+    message: string;
+    cooldown_seconds: number;
+    otp_code?: string;
+    verification_token?: string;
+  }> => {
+    const response = await api.post('/auth/register/resend', { email });
+    return response.data;
+  },
+
+  completeRegistration: async (data: {
+    email: string;
+    verified_token: string;
+    selected_account_type: string;
+  }): Promise<AuthResponse> => {
+    const response = await api.post<any>('/auth/register/complete', data);
+    return {
+      access_token: response.data.access_token,
+      token_type: response.data.token_type,
+      user: {
+        id: response.data.user_id,
+        username: response.data.username || data.email,
+        email: data.email,
+        full_name: response.data.full_name,
+        approval_status: response.data.approval_status || 'APPROVED',
+        is_active: true,
+        roles: [{ id: 1, name: response.data.role }],
+      },
     };
   },
 
@@ -101,9 +200,10 @@ export const authService = {
       : (typeof r === 'string' ? { id: response.data.role_id || 1, name: r } : null);
     return {
       id: response.data.id,
-      username: response.data.email,
+      username: response.data.username || response.data.email,
       email: response.data.email,
       full_name: response.data.full_name,
+      approval_status: response.data.approval_status || 'APPROVED',
       is_active: response.data.is_active,
       roles: roleObj ? [roleObj] : []
     };
@@ -122,9 +222,9 @@ export const searchService = {
       query,
       limit: page_size,
     });
-    
+
     const backendData = response.data;
-    
+
     const documents = backendData.results
       .filter((r: any) => r.entity_type === 'DOCUMENT')
       .map((r: any) => ({
@@ -144,7 +244,7 @@ export const searchService = {
         conservation_status: r.metadata.iucn_category,
         description: r.snippet
       }));
-      
+
     const observations = backendData.results
       .filter((r: any) => r.entity_type === 'OBSERVATION')
       .map((r: any) => ({
@@ -156,7 +256,7 @@ export const searchService = {
         observed_at: r.metadata.observed_at || '',
         verification_status: 'VERIFIED'
       }));
-      
+
     return {
       query: backendData.query || query,
       total_results: backendData.total_results || 0,
@@ -176,7 +276,7 @@ export const searchService = {
 
 // NLP Intelligence Services
 export const nlpService = {
-  analyzeText: async (text: string, title?: string): Promise<NLPAnalysisResult> => {
+  analyzeText: async (text: string, title?: string, signal?: AbortSignal): Promise<NLPAnalysisResult> => {
     const response = await api.post<any>('/documents', {
       raw_text: text,
       title: title || 'NLP Analysis',
@@ -184,7 +284,7 @@ export const nlpService = {
       author: 'Frontend User',
       publication_date: new Date().toISOString().split('T')[0],
       url: ''
-    });
+    }, { signal, timeout: 30000 });
 
     const data = response.data;
     const nlp = data.nlp_results || {};
@@ -193,13 +293,37 @@ export const nlpService = {
     const threats = (data.threat_mentions || []).map((t: any) => ({
       threat_code: t.category_name,
       threat_name: t.category_name,
-      confidence: t.confidence_score || 0.8,
+      confidence: t.confidence_score != null ? t.confidence_score : 0.6,
       severity_weight: 0.8,
-      matched_keywords: []
+      matched_keywords: [],
+      evidence_status: t.evidence_status || 'REPORTED_SOURCE',
+      supporting_passage: t.supporting_passage,
+      section_type: t.section_type || 'BODY',
+      score_type: t.score_type || 'CALIBRATED_PROBABILITY',
+      explanation: t.explanation
     }));
+
+    // Map calibrated topic breakdown instead of flat 1.0!
+    const topicBreakdown = data.topic_breakdown || (data.nlp_results && data.nlp_results.topic_breakdown) || [];
+    const topics = topicBreakdown.length > 0
+      ? topicBreakdown.map((tb: any) => ({
+          topic_code: tb.topic,
+          topic_name: tb.topic,
+          score: tb.confidence != null ? tb.confidence : 0.5,
+          score_type: tb.score_type || 'CALIBRATED_PROBABILITY',
+          raw_score: tb.raw_score,
+          explanation: tb.explanation
+        }))
+      : (data.topics || []).map((t: string) => ({
+          topic_code: t,
+          topic_name: t,
+          score: 1.0 / Math.max(1, (data.topics || []).length),
+          score_type: 'ESTIMATED_SHARE'
+        }));
 
     return {
       title: data.title,
+      document_type: data.document_type || (data.nlp_results && data.nlp_results.document_type) || 'GENERAL_CONSERVATION_DOC',
       cleaned_text: data.cleaned_text || text,
       sentence_count: text.split(/[.!?]+/).length || 1,
       entities: {
@@ -207,14 +331,11 @@ export const nlpService = {
         locations: entities.locations || [],
         protected_areas: entities.protected_areas || [],
         organizations: entities.organizations || [],
-        dates: entities.dates || []
+        dates: entities.dates || entities.temporal_expressions || [],
+        people: entities.people_and_authors || []
       },
       threats,
-      topics: (data.topics || []).map((t: string) => ({
-        topic_code: t,
-        topic_name: t,
-        score: 1.0
-      })),
+      topics,
       summary: data.summary || '',
       embedding: [],
       embedding_dimension: 0,
@@ -222,13 +343,15 @@ export const nlpService = {
     };
   },
 
-  analyzePdf: async (file: File, title?: string): Promise<NLPAnalysisResult> => {
+  analyzePdf: async (file: File, title?: string, signal?: AbortSignal): Promise<NLPAnalysisResult> => {
     const formData = new FormData();
     formData.append('file', file);
 
     const params = title ? `?title=${encodeURIComponent(title)}` : '';
     const response = await api.post<any>(`/documents/upload-pdf${params}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      signal,
+      timeout: 45000,
     });
 
     const data = response.data;
@@ -238,13 +361,36 @@ export const nlpService = {
     const threats = (data.threat_mentions || []).map((t: any) => ({
       threat_code: t.category_name,
       threat_name: t.category_name,
-      confidence: t.confidence_score || 0.8,
+      confidence: t.confidence_score != null ? t.confidence_score : 0.6,
       severity_weight: 0.8,
-      matched_keywords: []
+      matched_keywords: [],
+      evidence_status: t.evidence_status || 'REPORTED_SOURCE',
+      supporting_passage: t.supporting_passage,
+      section_type: t.section_type || 'BODY',
+      score_type: t.score_type || 'CALIBRATED_PROBABILITY',
+      explanation: t.explanation
     }));
+
+    const topicBreakdown = data.topic_breakdown || (data.nlp_results && data.nlp_results.topic_breakdown) || [];
+    const topics = topicBreakdown.length > 0
+      ? topicBreakdown.map((tb: any) => ({
+          topic_code: tb.topic,
+          topic_name: tb.topic,
+          score: tb.confidence != null ? tb.confidence : 0.5,
+          score_type: tb.score_type || 'CALIBRATED_PROBABILITY',
+          raw_score: tb.raw_score,
+          explanation: tb.explanation
+        }))
+      : (data.topics || []).map((t: string) => ({
+          topic_code: t,
+          topic_name: t,
+          score: 1.0 / Math.max(1, (data.topics || []).length),
+          score_type: 'ESTIMATED_SHARE'
+        }));
 
     return {
       title: data.title,
+      document_type: data.document_type || (data.nlp_results && data.nlp_results.document_type) || 'GENERAL_CONSERVATION_DOC',
       cleaned_text: data.cleaned_text || '',
       sentence_count: (data.cleaned_text || '').split(/[.!?]+/).length || 1,
       entities: {
@@ -252,14 +398,11 @@ export const nlpService = {
         locations: entities.locations || [],
         protected_areas: entities.protected_areas || [],
         organizations: entities.organizations || [],
-        dates: entities.dates || []
+        dates: entities.dates || entities.temporal_expressions || [],
+        people: entities.people_and_authors || []
       },
       threats,
-      topics: (data.topics || []).map((t: string) => ({
-        topic_code: t,
-        topic_name: t,
-        score: 1.0
-      })),
+      topics,
       summary: data.summary || '',
       embedding: [],
       embedding_dimension: 0,
@@ -279,11 +422,11 @@ export const mlService = {
       risk_score: r.composite_score,
       risk_level: r.risk_level
     }));
-    
+
     if (risk_level) {
       items = items.filter((i: any) => i.risk_level === risk_level);
     }
-    
+
     return { items };
   },
 
@@ -303,6 +446,12 @@ export const mlService = {
   getAnomalies: async (page: number = 1): Promise<{ items: AnomalyResult[] }> => {
     const response = await api.get('/ml/anomalies', { params: { skip: (page - 1) * 50, limit: 50 } });
     return { items: response.data };
+  },
+
+  acknowledgeAnomaly: async (id: number, notes?: string, status?: string): Promise<any> => {
+    const payload = notes || status ? { notes, status: status || 'ACKNOWLEDGED' } : {};
+    const response = await api.post(`/ml/anomalies/${id}/acknowledge`, payload);
+    return response.data;
   },
 
   getIntelligenceOverview: async (): Promise<ConservationIntelligenceOverview> => {
@@ -643,6 +792,14 @@ export const adminPlatformService = {
 
   toggleUserStatus: async (userId: number, isActive: boolean): Promise<any> => {
     const response = await api.put(`/admin/platform/users/${userId}/status`, { is_active: isActive });
+    return response.data;
+  },
+
+  approveUser: async (userId: number, action: 'APPROVE' | 'REJECT', assignedRole?: string): Promise<any> => {
+    const response = await api.put(`/admin/platform/users/${userId}/approve`, {
+      action,
+      assigned_role: assignedRole,
+    });
     return response.data;
   },
 

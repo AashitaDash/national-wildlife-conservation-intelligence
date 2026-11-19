@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Users,
   DownloadCloud,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -37,34 +38,67 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-  const { hasRole } = useAuth();
+  const { hasRole, primaryRole } = useAuth();
 
   // Role-tailored navigation items
-  const items = [...BASE_NAV_ITEMS];
+  const items: { to: string; label: string; icon: any }[] = [];
 
-  if (hasRole('RESEARCHER') || hasRole('ADMIN')) {
+  const isAdmin = primaryRole === 'ADMIN' || hasRole('ADMIN');
+  const isOfficer = primaryRole === 'FOREST_OFFICER' || hasRole('FOREST_OFFICER');
+  const isResearcher = primaryRole === 'RESEARCHER' || hasRole('RESEARCHER');
+  const isPublic = !isAdmin && !isOfficer && !isResearcher;
+
+  // 1. General Public Experience: Clean, read-only educational awareness
+  if (isPublic) {
     items.push(
-      { to: '/researcher',     label: 'RESEARCHER HUB', icon: Compass    },
-      { to: '/submit',         label: 'LOG SIGHTING',   icon: PlusCircle },
-      { to: '/my-submissions', label: 'MY FIELD LOGS',  icon: FileCheck  },
-      { to: '/leaderboard',    label: 'HONOR ROLL',     icon: Trophy     }
+      { to: '/',          label: 'OVERVIEW',         icon: LayoutDashboard },
+      { to: '/awareness', label: 'AWARENESS HUB',    icon: BookOpen },
+      { to: '/species',   label: 'SPECIES REGISTRY', icon: PawPrint }
     );
-  }
-
-  if (hasRole('FOREST_OFFICER') || hasRole('ADMIN')) {
-    items.push({
-      to: '/officer',
-      label: 'OFFICER AUDIT',
-      icon: ShieldCheck,
-    });
-  }
-
-  if (hasRole('ADMIN')) {
-    items.push({
-      to: '/admin',
-      label: 'SYSTEM ADMIN',
-      icon: Settings,
-    });
+  } else if (isAdmin) {
+    // 2. Administrator Experience: High-level platform governance + shared awareness
+    items.push(
+      { to: '/admin',     label: 'GOVERNANCE CONSOLE', icon: Settings },
+      { to: '/awareness', label: 'AWARENESS HUB',    icon: BookOpen },
+      { to: '/',          label: 'INTELLIGENCE HUB', icon: LayoutDashboard },
+      { to: '/assistant', label: 'AI ASSISTANT',       icon: Bot },
+      { to: '/species',   label: 'SPECIES REGISTRY',    icon: PawPrint },
+      { to: '/map',       label: 'SPATIAL MAP',         icon: MapPin },
+      { to: '/threats',   label: 'THREATS & ML RISK',   icon: ShieldAlert },
+      { to: '/documents', label: 'NLP DOCUMENTS',       icon: FileText },
+      { to: '/alerts',    label: 'ALERTS & ANOMALIES',  icon: AlertOctagon },
+      { to: '/reports',   label: 'REPORTS & EXPORTS',   icon: DownloadCloud }
+    );
+  } else if (isOfficer) {
+    // 3. Forest Officer Experience: Operational field workspace + shared awareness
+    items.push(
+      { to: '/officer',   label: 'OFFICER DESK',       icon: ShieldCheck },
+      { to: '/awareness', label: 'AWARENESS HUB',    icon: BookOpen },
+      { to: '/assistant', label: 'AI ASSISTANT',       icon: Bot },
+      { to: '/documents', label: 'ASK THE CORPUS / NLP', icon: FileText },
+      { to: '/map',       label: 'SPATIAL MAP & GIS',  icon: MapPin },
+      { to: '/alerts',    label: 'THREAT ALERTS & ANOMALIES', icon: AlertOctagon },
+      { to: '/threats',   label: 'THREAT ANALYTICS',   icon: ShieldAlert },
+      { to: '/species',   label: 'SPECIES REGISTRY',    icon: PawPrint },
+      { to: '/reports',   label: 'OPERATIONAL REPORTS',icon: DownloadCloud },
+      { to: '/submit',    label: 'RECORD OBSERVATION', icon: PlusCircle },
+      { to: '/my-submissions', label: 'FIELD RECORDS', icon: FileCheck }
+    );
+  } else if (isResearcher) {
+    // 4. Researcher Experience: Investigation workspace + shared awareness
+    items.push(
+      { to: '/researcher', label: 'RESEARCH STATION',  icon: Compass },
+      { to: '/awareness',  label: 'AWARENESS HUB',    icon: BookOpen },
+      { to: '/assistant',  label: 'AI ASSISTANT',      icon: Bot },
+      { to: '/documents',  label: 'ASK THE CORPUS / NLP', icon: FileText },
+      { to: '/species',    label: 'SPECIES REGISTRY',  icon: PawPrint },
+      { to: '/map',        label: 'SPATIAL MAP',       icon: MapPin },
+      { to: '/threats',    label: 'THREAT ANALYTICS',  icon: ShieldAlert },
+      { to: '/reports',    label: 'RESEARCH REPORTS',  icon: DownloadCloud },
+      { to: '/submit',     label: 'LOG SIGHTING',      icon: PlusCircle },
+      { to: '/my-submissions', label: 'MY FIELD LOGS', icon: FileCheck },
+      { to: '/leaderboard', label: 'HONOR ROLL',       icon: Trophy }
+    );
   }
 
   return (

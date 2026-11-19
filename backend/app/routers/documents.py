@@ -57,40 +57,70 @@ def get_nlp_pipeline():
     return _extractor, _threat_matcher, _topic_classifier, _summarizer, _embedder
 
 
-def _format_document_response(doc: Document) -> DocumentResponse:
+def _format_document_response(doc: Document, nlp_res: Optional[NLPAnalysisResult] = None) -> DocumentResponse:
     species_items = []
+    # Check if we have extracted species evidence from nlp_res
+    species_evidence_map = {}
+    if nlp_res and nlp_res.extracted_entities:
+        for s in nlp_res.extracted_entities.get("species", []):
+            if isinstance(s, dict) and s.get("canonical_name"):
+                species_evidence_map[s["canonical_name"].lower()] = s.get("evidence_passage")
+
     for sm in doc.species_mentions:
         if sm.species:
+            c_lower = sm.species.common_name.lower()
             species_items.append(
                 SpeciesExtractionItem(
                     species_id=sm.species_id,
                     common_name=sm.species.common_name,
                     scientific_name=sm.species.scientific_name,
-                    mention_count=sm.mention_count
+                    mention_count=sm.mention_count,
+                    evidence_passage=species_evidence_map.get(c_lower)
                 )
             )
+
+    threat_meta_map = {}
+    if nlp_res and nlp_res.raw_meta:
+        for th in nlp_res.raw_meta.get("threat_extractions", []):
+            if isinstance(th, dict) and th.get("category_name"):
+                threat_meta_map[th["category_name"].lower()] = th
 
     threat_items = []
     for tm in doc.threat_mentions:
         if tm.threat:
+            cat_lower = tm.threat.category_name.lower()
+            th_meta = threat_meta_map.get(cat_lower, {})
             threat_items.append(
                 ThreatExtractionItem(
                     threat_id=tm.threat_id,
                     category_name=tm.threat.category_name,
-                    mention_count=1,
-                    confidence_score=tm.confidence_score or 0.8
+                    mention_count=th_meta.get("mention_count", 1),
+                    confidence_score=th_meta.get("confidence_score") or tm.confidence_score or 0.8,
+                    evidence_status=th_meta.get("evidence_status", "REPORTED_SOURCE"),
+                    supporting_passage=th_meta.get("supporting_passage"),
+                    section_type=th_meta.get("section_type", "BODY"),
+                    score_type=th_meta.get("score_type", "CALIBRATED_PROBABILITY"),
+                    explanation=th_meta.get("explanation")
                 )
             )
+
+    doc_type = "GENERAL_CONSERVATION_DOC"
+    topic_breakdown = None
+    if nlp_res and nlp_res.raw_meta:
+        doc_type = nlp_res.raw_meta.get("document_type", "GENERAL_CONSERVATION_DOC")
+        topic_breakdown = nlp_res.raw_meta.get("topic_breakdown")
 
     return DocumentResponse(
         id=doc.id,
         title=doc.title,
         source_type=doc.source_type,
+        document_type=doc_type,
         author=doc.author,
         publication_date=doc.publication_date,
         url=doc.url,
         summary=doc.summary,
         topics=doc.topics or [],
+        topic_breakdown=topic_breakdown,
         created_at=doc.created_at,
         species_mentions=species_items,
         threat_mentions=threat_items
@@ -115,7 +145,12 @@ def list_documents(
         query = query.filter(Document.species_mentions.any(species_id=species_id))
 
     docs = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
-    return [_format_document_response(d) for d in docs]
+    doc_ids = [d.id for d in docs]
+    nlp_results = {
+        nr.document_id: nr
+        for nr in db.query(NLPAnalysisResult).filter(NLPAnalysisResult.document_id.in_(doc_ids)).all()
+    } if doc_ids else {}
+    return [_format_document_response(d, nlp_results.get(d.id)) for d in docs]
 
 
 @router.get("/{doc_id}", response_model=DocumentDetailResponse)
@@ -127,17 +162,19 @@ def get_document_detail(doc_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Document ID {doc_id} not found")
 
-    base = _format_document_response(doc)
-    
-    # Fetch detailed NLP result if recorded
     nlp_res = db.query(NLPAnalysisResult).filter(NLPAnalysisResult.document_id == doc_id).first()
+    base = _format_document_response(doc, nlp_res)
+
     raw_meta = (nlp_res.raw_meta if nlp_res and nlp_res.raw_meta else {})
     nlp_payload = {
         "extracted_entities": nlp_res.extracted_entities if nlp_res else {},
         "topics": nlp_res.topics if nlp_res else [],
         "sentiment_score": raw_meta.get("sentiment_score", 0.0),
         "urgency_score": raw_meta.get("urgency", 0.0),
-        "processing_time_ms": raw_meta.get("processing_time_ms", 0.0)
+        "processing_time_ms": raw_meta.get("processing_time_ms", 0.0),
+        "document_type": raw_meta.get("document_type", "GENERAL_CONSERVATION_DOC"),
+        "threat_extractions": raw_meta.get("threat_extractions", []),
+        "topic_breakdown": raw_meta.get("topic_breakdown", [])
     }
 
     return DocumentDetailResponse(
@@ -151,11 +188,12 @@ def get_document_detail(doc_id: int, db: Session = Depends(get_db)):
 def upload_and_process_document(
     doc_in: DocumentCreate,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user)
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO"))
 ):
     """
     Ingest unstructured document or incident dispatch:
-    Executes automated preprocessing, entity recognition, threat categorization,
+    Executes automated preprocessing, section segmentation, document classification,
+    evidence-grounded entity recognition, calibrated threat categorization,
     topic modeling, extractive summarization, and dense vector embedding.
     """
     extractor, threat_matcher, topic_classifier, summarizer, embedder = get_nlp_pipeline()
@@ -163,23 +201,39 @@ def upload_and_process_document(
     start_time = datetime.datetime.now(datetime.timezone.utc)
     t0 = time.time()
 
-    # 1. Preprocessing
+    # 1. Preprocessing & Section Segmentation
     cleaned_text = TextPreprocessor.clean_text(doc_in.raw_text)
+    sections = TextPreprocessor.segment_sections(doc_in.raw_text)
+    doc_type = TextPreprocessor.classify_document_type(doc_in.raw_text, title=doc_in.title)
     t1 = time.time()
-    print(f"[NLP PERF] Text preprocessing = {(t1 - t0) * 1000:.2f} ms")
+    print(f"[NLP PERF] Text preprocessing, sections={len(sections)}, type={doc_type} = {(t1 - t0) * 1000:.2f} ms")
 
-    # 2. Hybrid NER
-    entities = extractor.extract_entities(cleaned_text)
+    # 2. Hybrid NER with supporting passages and section context
+    try:
+        entities = extractor.extract_entities(cleaned_text, sections=sections)
+    except TypeError:
+        entities = extractor.extract_entities(cleaned_text)
     t2 = time.time()
-    print(f"[NLP PERF] Gazetteer/entity extraction = {(t2 - t1) * 1000:.2f} ms")
+    print(f"[NLP PERF] Entity extraction = {(t2 - t1) * 1000:.2f} ms")
 
-    # 3. Threat Extraction
-    threat_extractions = threat_matcher.extract_threats(cleaned_text)
+    # 3. Calibrated Threat Extraction with supporting passages and evidence status
+    try:
+        threat_extractions = threat_matcher.extract_threats(
+            cleaned_text,
+            document_type=doc_type,
+            sections=sections
+        )
+    except TypeError:
+        threat_extractions = threat_matcher.extract_threats(cleaned_text)
     t3 = time.time()
-    print(f"[NLP PERF] Threat extraction = {(t3 - t2) * 1000:.2f} ms")
+    print(f"[NLP PERF] Threat extraction ({len(threat_extractions)} found) = {(t3 - t2) * 1000:.2f} ms")
 
-    # 4. Topic Modeling
-    topics = topic_classifier.classify_topics(cleaned_text)
+    # 4. Topic Modeling with Section-Aware weighting
+    try:
+        topic_breakdown = topic_classifier.classify(cleaned_text, sections=sections)
+    except TypeError:
+        topic_breakdown = topic_classifier.classify(cleaned_text)
+    topics = [t["topic"] for t in topic_breakdown]
     t4 = time.time()
     print(f"[NLP PERF] Topic classification = {(t4 - t3) * 1000:.2f} ms")
 
@@ -190,7 +244,6 @@ def upload_and_process_document(
     print(f"[NLP PERF] Summarization = {(t5 - t4) * 1000:.2f} ms")
 
     # 6. Dense Vector Embedding (384-d)
-    # The embeddings.py has been modified to print model load vs embedding generation
     embedding = embedder.embed_text(cleaned_text)
     t6 = time.time()
     print(f"[NLP PERF] Total embedder.embed_text call = {(t6 - t5) * 1000:.2f} ms")
@@ -207,7 +260,7 @@ def upload_and_process_document(
         summary=summary_text,
         topics=topics,
         embedding_json=embedding,
-        author_user_id=current_user.id if current_user else None
+        author_user_id=getattr(current_user, "id", None) if current_user and not hasattr(current_user, "dependency") else None
     )
     db.add(doc)
     db.flush()
@@ -231,13 +284,12 @@ def upload_and_process_document(
                 )
                 db.add(doc_sp)
 
-    # 9. Link Threat Associations
+    # 9. Link Threat Associations with Calibrated Confidence
     threat_map = {t.category_name.lower(): t.id for t in db.query(Threat).all()}
     for th in threat_extractions:
         cat_lower = th.get("category_name", "").lower()
         threat_id = threat_map.get(cat_lower)
         if not threat_id:
-            # Create threat category if missing
             new_threat = Threat(category_name=th["category_name"])
             db.add(new_threat)
             db.flush()
@@ -247,7 +299,7 @@ def upload_and_process_document(
         doc_th = DocumentThreat(
             document_id=doc.id,
             threat_id=threat_id,
-            confidence_score=th.get("confidence_score", 0.85)
+            confidence_score=th.get("confidence_score", 0.50)
         )
         db.add(doc_th)
 
@@ -257,7 +309,13 @@ def upload_and_process_document(
         document_id=doc.id,
         extracted_entities=entities,
         topics=topics,
-        raw_meta={"processing_time_ms": proc_time_ms, "urgency": 0.8 if len(threat_extractions) > 0 else 0.2}
+        raw_meta={
+            "processing_time_ms": proc_time_ms,
+            "document_type": doc_type,
+            "threat_extractions": threat_extractions,
+            "topic_breakdown": topic_breakdown,
+            "urgency": 0.8 if any(t.get("evidence_status") == "DIRECTLY_OBSERVED" for t in threat_extractions) else 0.3
+        }
     )
     db.add(nlp_res)
 
@@ -330,7 +388,7 @@ async def upload_pdf_document(
     file: UploadFile = File(..., description="PDF file to analyse (max 10 MB by default)"),
     title: Optional[str] = Query(None, description="Optional document title; defaults to the uploaded filename"),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     Phase 1 – Validate
@@ -408,7 +466,7 @@ async def upload_pdf_document(
 def synthesize_documents(
     req: SynthesisRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     Multi-Document Conservation Synthesis endpoint.
@@ -473,7 +531,7 @@ def synthesize_documents(
 def ask_conservation_corpus(
     req: QARequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(require_roles("RESEARCHER", "FOREST_OFFICER", "ADMIN", "NGO")),
 ):
     """
     Evidence-Grounded Question Answering endpoint.

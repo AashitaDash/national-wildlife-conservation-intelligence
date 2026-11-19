@@ -1,4 +1,5 @@
 import datetime
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from backend.app.database import Base
@@ -28,6 +29,18 @@ class Observation(Base):
     """
     __tablename__ = "observations"
 
+    __table_args__ = (
+        # Ensure one external record per source; protects against duplicate imports
+        # Works on PostgreSQL and SQLite
+        UniqueConstraint('source_id', 'external_id', name='uq_observation_source_external'),
+    )
+
+    """
+    Spatially and temporally registered wildlife observation record.
+    Preserves provenance across external biodiversity databases and citizen submissions.
+    """
+    __tablename__ = "observations"
+
     id = Column(Integer, primary_key=True, index=True)
     species_id = Column(Integer, ForeignKey("species.id"), nullable=False, index=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
@@ -38,11 +51,12 @@ class Observation(Base):
     latitude = Column(Float, nullable=False, index=True)
     longitude = Column(Float, nullable=False, index=True)
     accuracy_meters = Column(Float, nullable=True)
-    
+
     # Status: VERIFIED (from authoritative API/official), CITIZEN_PENDING, FLAGGED
     verification_status = Column(String(50), default="VERIFIED", index=True)
     notes = Column(Text, nullable=True)
     raw_metadata = Column(JSON, nullable=True)
+    external_id = Column(String(200), nullable=True, index=True)  # provider‑specific identifier (e.g., GBIF occurrenceID)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships

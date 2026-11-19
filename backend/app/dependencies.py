@@ -1,4 +1,4 @@
-from typing import Generator, List, Callable, Optional
+from typing import Generator, List, Callable, Optional, Union, Iterable
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -51,12 +51,31 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user account"
         )
+    if getattr(user, "is_suspended", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is suspended"
+        )
     return user
 
 
 def get_current_active_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
+    """
+    Requires active user and approved status for active operational participation.
+    Pending users cannot submit observations, reports, or access operational dashboards.
+    """
+    if getattr(current_user, "approval_status", "APPROVED") == "PENDING":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account registration is pending administrator review and approval."
+        )
+    if getattr(current_user, "approval_status", "APPROVED") == "REJECTED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account registration has been rejected."
+        )
     return current_user
 
 
@@ -78,19 +97,38 @@ def get_optional_user(
         return None
 
 
-def require_roles(*allowed_roles: str) -> Callable[[User], User]:
+def require_roles(*allowed_roles: Union[str, Iterable[str]]) -> Callable[[User], User]:
     """
     Role-Based Access Control (RBAC) guard factory.
-    Example: Depends(require_roles("ADMIN", "ECOLOGIST"))
+    Blocks pending or rejected accounts from accessing protected role-specific endpoints.
     """
-    allowed_set = {r.upper() for r in allowed_roles}
+    flattened = []
+    for r in allowed_roles:
+        if isinstance(r, (list, tuple, set)):
+            flattened.extend(r)
+        else:
+            flattened.append(r)
+    allowed_set = {str(r).upper() for r in flattened}
 
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        # Check approval status first
+        approval_status = getattr(current_user, "approval_status", "APPROVED")
+        if approval_status == "PENDING":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account registration is pending administrator review and approval."
+            )
+        if approval_status == "REJECTED":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account registration has been rejected."
+            )
+
         user_role = current_user.role.name.upper() if current_user.role else "VIEWER"
         if user_role not in allowed_set and "ADMIN" not in user_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: requires one of roles [{', '.join(allowed_roles)}]. User is '{user_role}'."
+                detail=f"Access forbidden: requires one of roles [{', '.join(allowed_set)}]. User is '{user_role}'."
             )
         return current_user
 

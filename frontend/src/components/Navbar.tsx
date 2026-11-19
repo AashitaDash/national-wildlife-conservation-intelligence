@@ -16,8 +16,10 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onMenuToggle }) => {
-  const { user, logout, primaryRole } = useAuth();
+  const { user, logout, primaryRole, hasRole } = useAuth();
   const navigate = useNavigate();
+
+  const isPrivileged = hasRole('RESEARCHER') || hasRole('FOREST_OFFICER') || hasRole('ADMIN') || hasRole('NGO');
 
   const initials = user
     ? (user.full_name || user.username || 'U').slice(0, 2).toUpperCase()
@@ -92,17 +94,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuToggle }) => {
 
         {user ? (
           <div className="flex items-center gap-2">
-            {/* Alerts bell */}
-            <Link
-              to="/alerts"
-              title="Alerts"
-              className="w-8 h-8 flex items-center justify-center transition-colors"
-              style={{ color: '#77746c', borderRadius: '3px' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#f0ede6')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#77746c')}
-            >
-              <Bell className="w-4 h-4" />
-            </Link>
+            {/* Alerts bell — Only shown for Forest Officers, Researchers, and Admins */}
+            {isPrivileged && (
+              <Link
+                to="/alerts"
+                title="Alerts"
+                className="w-8 h-8 flex items-center justify-center transition-colors"
+                style={{ color: '#77746c', borderRadius: '3px' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#f0ede6')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#77746c')}
+              >
+                <Bell className="w-4 h-4" />
+              </Link>
+            )}
 
             {/* User info */}
             <div

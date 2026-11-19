@@ -33,8 +33,17 @@ class SearchService:
             return 0.0
         return float(np.dot(v1, v2) / (norm1 * norm2))
 
+    COMMON_STOPWORDS = {
+        "which", "what", "where", "when", "who", "whom", "whose", "why", "how",
+        "are", "is", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "the", "a", "an", "and", "or", "but", "in", "on",
+        "at", "to", "for", "with", "about", "against", "between", "into", "through",
+        "during", "before", "after", "above", "below", "from", "up", "down", "of",
+        "associated", "related", "found", "reported", "observed", "occurs"
+    }
+
     @classmethod
-    def hybrid_search(
+    def search_documents(
         cls,
         db: Session,
         query: str,
@@ -44,8 +53,9 @@ class SearchService:
         limit: int = 20
     ) -> List[SearchResultItem]:
         """
-        Executes hybrid lexical and semantic search.
-        Score = (1 - alpha) * lexical_score + alpha * vector_score
+        Executes dedicated hybrid lexical and semantic search specifically across documents.
+        Guarantees that corpus QA evaluates top document candidates without interference from
+        other entities.
         """
         results: List[SearchResultItem] = []
         clean_q = query.strip().lower()
@@ -56,7 +66,12 @@ class SearchService:
         embedder = cls.get_embedder()
         query_vec = embedder.embed_text(query)
 
-        # 2. Search Documents
+        # 2. Extract meaningful search tokens
+        all_tokens = [w for w in clean_q.split() if len(w) > 2]
+        meaningful_tokens = [w for w in all_tokens if w not in cls.COMMON_STOPWORDS]
+        tokens_for_matching = meaningful_tokens if meaningful_tokens else all_tokens
+
+        # 3. Query documents
         doc_query = db.query(Document)
         if source_type:
             doc_query = doc_query.filter(Document.source_type == source_type)
@@ -67,15 +82,23 @@ class SearchService:
 
         documents = doc_query.all()
         for doc in documents:
-            # Lexical score
-            text_corpus = f"{doc.title} {doc.summary or ''} {doc.cleaned_text or doc.raw_text}".lower()
+            text_corpus = f"{doc.title} {doc.summary or ''} {doc.cleaned_text or doc.raw_text or ''}".lower()
+
+            # Lexical matching
             lexical_score = 0.0
-            query_words = [w for w in clean_q.split() if len(w) > 2]
-            if query_words:
-                matches = sum(1 for w in query_words if w in text_corpus)
-                lexical_score = min(1.0, matches / len(query_words))
+            if tokens_for_matching:
+                matches = sum(1 for w in tokens_for_matching if w in text_corpus)
+                lexical_score = min(1.0, matches / len(tokens_for_matching))
+
+            # Phrase bonus
             if clean_q in text_corpus:
                 lexical_score = max(lexical_score, 0.9)
+            else:
+                # Check 2-word n-gram matches (e.g. "human-wildlife conflict" or "habitat loss")
+                for i in range(len(all_tokens) - 1):
+                    bigram = f"{all_tokens[i]} {all_tokens[i+1]}"
+                    if bigram in text_corpus and bigram not in cls.COMMON_STOPWORDS:
+                        lexical_score = max(lexical_score, min(1.0, lexical_score + 0.25))
 
             # Vector score
             vector_score = 0.0
@@ -86,8 +109,8 @@ class SearchService:
 
             combined_score = ((1.0 - hybrid_alpha) * lexical_score) + (hybrid_alpha * vector_score)
 
-            if combined_score > 0.15 or lexical_score > 0.3:
-                snippet = doc.summary or (doc.raw_text[:200] + "...")
+            if combined_score >= 0.12 or lexical_score >= 0.25:
+                snippet = doc.summary or ((doc.raw_text or '')[:200] + "...")
                 results.append(
                     SearchResultItem(
                         id=doc.id,
@@ -104,32 +127,77 @@ class SearchService:
                     )
                 )
 
-        # 3. Search Species Catalog (Lexical + Semantic)
-        species_query = db.query(Species).all()
-        for sp in species_query:
-            sp_text = f"{sp.common_name} {sp.scientific_name} {sp.description or ''} {sp.family or ''}".lower()
-            sp_lexical = 0.0
-            if clean_q in sp.common_name.lower() or clean_q in sp.scientific_name.lower():
-                sp_lexical = 1.0
-            elif any(w in sp_text for w in query_words):
-                sp_lexical = 0.6
-
-            if sp_lexical > 0:
-                results.append(
-                    SearchResultItem(
-                        id=sp.id,
-                        entity_type="SPECIES",
-                        title=f"{sp.common_name} ({sp.scientific_name})",
-                        snippet=sp.description or f"Catalogued IUCN status: {sp.iucn_category}",
-                        relevance_score=round(float(sp_lexical), 4),
-                        metadata={
-                            "iucn_category": sp.iucn_category,
-                            "family": sp.family,
-                            "image_url": sp.image_url
-                        }
-                    )
-                )
-
-        # Rank results descending by combined relevance score
         results.sort(key=lambda r: r.relevance_score, reverse=True)
         return results[:limit]
+
+    @classmethod
+    def hybrid_search(
+        cls,
+        db: Session,
+        query: str,
+        species_id: Optional[int] = None,
+        source_type: Optional[str] = None,
+        hybrid_alpha: float = 0.5,
+        limit: int = 20
+    ) -> List[SearchResultItem]:
+        """
+        Executes multi-entity hybrid search.
+        Balances document candidates and species candidates so neither entity type
+        crowds out the other.
+        """
+        clean_q = query.strip().lower()
+        if not clean_q:
+            return []
+
+        doc_limit = max(10, limit // 2)
+        doc_results = cls.search_documents(
+            db=db,
+            query=query,
+            species_id=species_id,
+            source_type=source_type,
+            hybrid_alpha=hybrid_alpha,
+            limit=doc_limit
+        )
+
+        # Species matching with meaningful tokens (ignoring stop words like 'which', 'are', 'with')
+        all_tokens = [w for w in clean_q.split() if len(w) > 2]
+        meaningful_tokens = [w for w in all_tokens if w not in cls.COMMON_STOPWORDS]
+
+        species_results: List[SearchResultItem] = []
+        if meaningful_tokens:
+            species_query = db.query(Species).all()
+            for sp in species_query:
+                c_lower = sp.common_name.lower()
+                s_lower = sp.scientific_name.lower()
+                sp_text = f"{c_lower} {s_lower} {sp.description or ''} {sp.family or ''}".lower()
+
+                sp_lexical = 0.0
+                if clean_q in c_lower or clean_q in s_lower:
+                    sp_lexical = 1.0
+                elif any(tok in c_lower or tok in s_lower for tok in meaningful_tokens):
+                    sp_lexical = 0.8
+                elif any(tok in sp_text for tok in meaningful_tokens):
+                    sp_lexical = 0.4
+
+                if sp_lexical > 0:
+                    species_results.append(
+                        SearchResultItem(
+                            id=sp.id,
+                            entity_type="SPECIES",
+                            title=f"{sp.common_name} ({sp.scientific_name})",
+                            snippet=sp.description or f"Catalogued IUCN status: {sp.iucn_category}",
+                            relevance_score=round(float(sp_lexical), 4),
+                            metadata={
+                                "iucn_category": sp.iucn_category,
+                                "family": sp.family,
+                                "image_url": sp.image_url
+                            }
+                        )
+                    )
+
+            species_results.sort(key=lambda r: r.relevance_score, reverse=True)
+            species_results = species_results[:max(5, limit // 2)]
+
+        combined = doc_results + species_results
+        combined.sort(key=lambda r: r.relevance_score, reverse=True)
+        return combined[:limit]

@@ -24,6 +24,7 @@ from backend.app.models.submission import (
 )
 from backend.app.models.species import Species
 from backend.app.models.observation import Observation
+from backend.app.schemas.auth import UserApprovalRequest
 from backend.app.schemas.submission import (
     AdminUserResponse,
     AdminPlatformStats,
@@ -42,23 +43,35 @@ router = APIRouter(
 
 
 def _build_admin_user(user: User, db: Session) -> AdminUserResponse:
-    sub_count = db.query(ObservationSubmission).filter(
-        ObservationSubmission.researcher_id == user.id
-    ).count()
-    verified_count = db.query(ObservationSubmission).filter(
-        ObservationSubmission.researcher_id == user.id,
-        ObservationSubmission.status == "VERIFIED",
-    ).count()
+    try:
+        sub_count = db.query(ObservationSubmission).filter(
+            ObservationSubmission.researcher_id == user.id
+        ).count()
+        verified_count = db.query(ObservationSubmission).filter(
+            ObservationSubmission.researcher_id == user.id,
+            ObservationSubmission.status == "VERIFIED",
+        ).count()
+    except Exception:
+        # observation_submissions may not exist in SQLite dev schema
+        db.rollback()
+        sub_count = 0
+        verified_count = 0
     return AdminUserResponse(
         id=user.id,
         email=user.email,
+        username=user.username,
         full_name=user.full_name,
         organization=user.organization,
         is_active=user.is_active,
         is_suspended=getattr(user, "is_suspended", False),
         role_name=user.role.name if user.role else "VIEWER",
+        approval_status=getattr(user, "approval_status", "APPROVED"),
         created_at=user.created_at,
         last_active_at=getattr(user, "last_active_at", None),
+        approved_by_id=getattr(user, "approved_by_id", None),
+        approved_at=getattr(user, "approved_at", None),
+        role_assigned_by_id=getattr(user, "role_assigned_by_id", None),
+        role_assigned_at=getattr(user, "role_assigned_at", None),
         submission_count=sub_count,
         verified_count=verified_count,
     )
@@ -174,20 +187,35 @@ def update_user_role(
     if not user:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found.")
 
-    if user.id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot modify your own administrative role.")
-
+    # Resolve target role FIRST before any guard checks
     try:
         target_role = payload.target_role
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Sole-admin self-demotion guard
+    if user.id == current_user.id and target_role != "ADMIN":
+        other_admins = db.query(User).join(Role).filter(
+            Role.name == "ADMIN",
+            User.id != current_user.id,
+            User.is_active == True,
+            User.is_suspended == False
+        ).count()
+        if other_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot modify your own administrative role. You are the sole active platform administrator."
+            )
 
     new_role = db.query(Role).filter(Role.name == target_role).first()
     if not new_role:
         raise HTTPException(status_code=400, detail=f"Role '{target_role}' not found.")
 
     old_role = user.role.name if user.role else "UNKNOWN"
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
     user.role_id = new_role.id
+    user.role_assigned_by_id = current_user.id
+    user.role_assigned_at = now_utc
 
     AuditService.log(
         db, "ROLE_CHANGED",
@@ -229,6 +257,56 @@ def update_user_status(
             "is_active": payload.is_active,
             "is_suspended": payload.is_suspended,
             "reason": payload.reason,
+        },
+    )
+    db.commit()
+    db.refresh(user)
+    return _build_admin_user(user, db)
+
+@router.put("/users/{user_id}/approve", response_model=AdminUserResponse)
+def approve_or_reject_user(
+    user_id: int,
+    payload: UserApprovalRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Approve or reject a pending registration and optionally assign a role."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found.")
+
+    action = payload.action.upper()
+    if action not in ("APPROVE", "REJECT"):
+        raise HTTPException(status_code=400, detail="Action must be 'APPROVE' or 'REJECT'.")
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if action == "APPROVE":
+        user.approval_status = "APPROVED"
+        user.approved_by_id = current_user.id
+        user.approved_at = now_utc
+
+        if payload.assigned_role:
+            target_role = db.query(Role).filter(Role.name == payload.assigned_role.upper()).first()
+            if target_role:
+                user.role_id = target_role.id
+                user.role_assigned_by_id = current_user.id
+                user.role_assigned_at = now_utc
+    else:
+        user.approval_status = "REJECTED"
+        user.approved_by_id = current_user.id
+        user.approved_at = now_utc
+
+    AuditService.log(
+        db,
+        action="USER_APPROVAL_STATUS_CHANGED",
+        actor_id=current_user.id,
+        entity_type="USER",
+        entity_id=user.id,
+        metadata={
+            "status": user.approval_status,
+            "action": action,
+            "approved_by": current_user.email,
+            "assigned_role": user.role.name if user.role else None,
         },
     )
     db.commit()
